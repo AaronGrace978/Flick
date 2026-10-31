@@ -2,3 +2,5 @@
 /android/.gradle/
 /android/**/build/
 /android/local.properties
+/android/.kotlin/
+/releases/*

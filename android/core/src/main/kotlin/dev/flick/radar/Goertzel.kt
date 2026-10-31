@@ -8,6 +8,7 @@ import kotlin.math.*
  */
 class Goertzel(private val rate: Int) {
     companion object { const val N = 4096; const val CARRIER = 20000.0 }
+    init { require(rate == 44100 || rate == 48000) }
     private val spacing = rate.toDouble() / N / 2
     private val window = DoubleArray(N) { 0.5 - 0.5 * cos(2 * PI * it / (N - 1)) }
     private val coefficients = DoubleArray(41) { 2 * cos(2 * PI * (CARRIER + (it - 20) * spacing) / rate) }
@@ -18,13 +19,16 @@ class Goertzel(private val rate: Int) {
      * Thresholds are conservative POC defaults and require hardware calibration.
      */
     fun shift(samples: ShortArray): Double? {
+        require(samples.size == N)
+        var clipped = 0
         var energy = 0.0
         for (i in 0 until N) {
+            if (abs(samples[i].toInt()) >= 32760) clipped++
             val x = samples[i] / 32768.0 * window[i]
             work[i] = x
             energy += x * x
         }
-        if (energy < 1e-6) return null
+        if (clipped > N / 100 || energy < 1e-6) return null
         for (j in coefficients.indices) {
             val c = coefficients[j]
             var q1 = 0.0
@@ -35,6 +39,11 @@ class Goertzel(private val rate: Int) {
         var peak = 0
         for (i in powers.indices) if (powers[i] > powers[peak]) peak = i
         if (peak == 0 || peak == powers.lastIndex) return null
+        // Distinct strong secondary peaks indicate competing tones/multipath ambiguity.
+        for (i in 1 until powers.lastIndex) {
+            if (abs(i - peak) > 4 && powers[i] >= powers[i - 1] && powers[i] >= powers[i + 1]
+                && powers[i] > powers[peak] * 0.4) return null
+        }
         if (powers[peak] / (energy * N) < 0.08) return null
         var floor = 0.0
         var count = 0

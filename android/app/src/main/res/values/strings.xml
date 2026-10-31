@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Flick Radar</string>
+    <string name="intro">Flick acoustic Doppler\nUse low speaker volume. No absolute distance measurement.\nConnect both devices to the same trusted LAN.</string>
+    <string name="desktop_hint">Desktop LAN IPv4 address</string>
+    <string name="initial_status">Start the desktop beacon and receiver, then tap Start.</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="calibrate">Calibrate stationary baseline</string>
+    <string name="invalid_address">Enter a desktop unicast LAN IPv4 address</string>
+    <string name="starting">Starting microphone and sensors…</string>
+    <string name="permission_required">Microphone permission is required. Tap Start to retry.</string>
+    <string name="stopping">Stopping…</string>
+</resources>
