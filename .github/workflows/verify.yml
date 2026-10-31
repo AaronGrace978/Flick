@@ -30,7 +30,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
       - working-directory: android
         run: ./gradlew --no-daemon :core:check :app:assembleDebug :app:lintDebug
       - uses: actions/upload-artifact@v4

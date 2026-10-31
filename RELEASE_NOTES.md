@@ -1,23 +1,26 @@
-# v0.1.0-alpha.1
+# v0.1.0-alpha.2
 
-Initial source-only release of the Flick acoustic Doppler proof of concept.
+First binary release of the Flick acoustic Doppler proof of concept.
 
-- Rust 20 kHz desktop emitter using CPAL, with startup and shutdown fades.
-- Native Android PCM capture and overlapping Hann-windowed Goertzel estimation.
-- Native accelerometer/gyroscope acquisition and non-blocking UDP telemetry.
-- Rust telemetry dashboard with strict packet parsing and stale-data indication.
+## Downloads
 
-## Validation and limitations
+- `flick-desktop-*-linux-x86_64.tar.gz`, `*-windows-x86_64.zip`,
+  `*-macos-arm64.tar.gz`: the `emitter` (20 kHz beacon) and `receiver`
+  (UDP dashboard) binaries.
+- `flick-android-*.apk`: the Android receiver (API 26+). Debug-signed for
+  sideloading; enable installs from unknown sources.
 
-This is an experimental alpha, not a production-ready positioning system.
-Compilation, automated Rust tests, and audio/Android hardware testing have not
-been performed: the cloud machine lacks the build tools and its network proxy
-refuses connections. Android manifest XML parsing and whitespace checks passed.
-No binaries or APKs are provided.
+## Changes since v0.1.0-alpha.1
 
-The continuous tone estimates radial velocity, not absolute range. IMU readings
-are associated with acoustic estimates; calibrated inertial positioning is not
-implemented. Ultrasonic response, clock drift and multipath require device
-calibration. Telemetry has no authentication and cannot guarantee rejection of
-all late packets without synchronized clocks. See README.md for build steps,
-wire format, safety guidance and hardware acceptance checks.
+- Hardened acoustic tracking pipeline; shared desktop library with tests.
+- Desktop and Android builds verified in CI, plus a UDP smoke test.
+- Automated GitHub release workflow for desktop and Android artifacts.
+
+## Limitations
+
+This is an experimental alpha, not a production-ready positioning system, and
+it has not been validated on audio/Android hardware. The continuous tone
+estimates radial velocity, not absolute range. Ultrasonic response, clock
+drift and multipath require device calibration. Telemetry has no
+authentication; use only on a trusted LAN. Start the emitter at low volume.
+See README.md for build steps, wire format and hardware acceptance checks.
