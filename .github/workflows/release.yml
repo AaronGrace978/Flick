@@ -42,7 +42,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.name }}
-          path: flick-desktop-*
+          path: |
+            flick-desktop-*.tar.gz
+            flick-desktop-*.zip
           if-no-files-found: error
   android:
     runs-on: ubuntu-latest
