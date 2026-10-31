@@ -5,39 +5,53 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to release (created from the selected ref if missing)
+        description: Existing tag to release
         required: true
 permissions:
-  contents: write
+  contents: read
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
+  CARGO_BUILD_JOBS: '2'
 jobs:
   desktop:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            name: linux-x86_64
+            name: linux
             ext: ''
           - os: windows-latest
-            name: windows-x86_64
+            name: windows
             ext: .exe
           - os: macos-latest
-            name: macos-arm64
+            name: macos
             ext: ''
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
-      - run: rustup toolchain install stable --profile minimal
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev pkg-config
+      - run: rustup toolchain install stable --profile minimal --component clippy
       - working-directory: desktop
-        run: cargo +stable build --release --locked
+        run: cargo +stable test --locked -p flick-radar
+      - working-directory: desktop
+        run: cargo +stable clippy --locked -p flick-overlay -- -D warnings
+      - working-directory: desktop
+        run: cargo +stable build --release --locked --workspace
+      - if: runner.os == 'Linux'
+        run: python3 tests/udp_smoke.py
       - shell: bash
         run: |
-          dir="flick-desktop-$TAG-${{ matrix.name }}"
+          set -euo pipefail
+          host="$(rustc +stable -vV | sed -n 's/^host: //p')"
+          arch="${host%%-*}"
+          dir="flick-desktop-$TAG-${{ matrix.name }}-$arch"
           mkdir "$dir"
-          cp desktop/target/release/emitter${{ matrix.ext }} desktop/target/release/receiver${{ matrix.ext }} README.md "$dir/"
+          cp desktop/target/release/emitter${{ matrix.ext }} desktop/target/release/receiver${{ matrix.ext }} desktop/target/release/flick-overlay${{ matrix.ext }} "$dir/"
+          cp README.md OVERLAY.md RELEASE_NOTES.md LICENSE "$dir/"
           if [ "$RUNNER_OS" = Windows ]; then 7z a "$dir.zip" "$dir"; else tar czf "$dir.tar.gz" "$dir"; fi
       - uses: actions/upload-artifact@v4
         with:
@@ -50,6 +64,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -58,24 +74,41 @@ jobs:
         with:
           packages: 'platforms;android-35 build-tools;35.0.0'
       - working-directory: android
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon :core:check :app:assembleDebug :app:lintDebug
       - run: cp android/app/build/outputs/apk/debug/app-debug.apk "flick-android-$TAG.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: android
           path: flick-android-*.apk
           if-no-files-found: error
-  publish:
-    needs: [desktop, android]
+  browser:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --prefix "$RUNNER_TEMP/flick-tests" --no-save playwright@1.56.1
+      - run: NODE_PATH="$RUNNER_TEMP/flick-tests/node_modules" CHROMIUM=/usr/bin/google-chrome node tests/overlay_browser.cjs
+  publish:
+    needs: [desktop, android, browser]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+      - working-directory: dist
+        run: sha256sum flick-* > SHA256SUMS
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$TAG" dist/* --target "$GITHUB_SHA" --title "$TAG" \
+          gh release create "$TAG" dist/* --verify-tag --title "Flick $TAG" \
             --notes-file RELEASE_NOTES.md --prerelease
