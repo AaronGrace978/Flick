@@ -118,16 +118,32 @@ function receiveAsset(data) {
   document.querySelector("#asset-state").textContent = "Crossing the boundary";
   document.querySelector("#channel-state").textContent = "CAPTURED";
   card.className = "";
+  const preview = document.querySelector("#asset-preview");
+  preview.removeAttribute("src");
+  if (
+    typeof data.preview === "string" &&
+    window.__TAURI__?.core.convertFileSrc
+  ) {
+    preview.src = window.__TAURI__.core.convertFileSrc(data.preview);
+    card.classList.add("has-preview");
+  }
+  const cardHeight = card.offsetHeight;
   const edge = edgePoint(data.angle),
     inward = { x: -Math.cos(data.angle), y: Math.sin(data.angle) };
   const end = {
     x: Math.max(18, Math.min(width - 370, edge.x + inward.x * 230 - 176)),
-    y: Math.max(18, Math.min(height - 220, edge.y + inward.y * 180 - 90)),
+    y: Math.max(
+      18,
+      Math.min(
+        height - cardHeight - 18,
+        edge.y + inward.y * 180 - cardHeight / 2,
+      ),
+    ),
   };
   animation = {
     id: data.id,
     start: performance.now(),
-    from: { x: edge.x - 176, y: edge.y - 90 },
+    from: { x: edge.x - 176, y: edge.y - cardHeight / 2 },
     to: end,
     completed: false,
   };

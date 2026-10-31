@@ -22,18 +22,31 @@
         "focus": false,
         "visible": false,
         "backgroundColor": "#00000000"
+      },
+      {
+        "label": "control",
+        "title": "Flick",
+        "url": "control.html",
+        "width": 620,
+        "height": 780,
+        "minWidth": 520,
+        "minHeight": 640,
+        "center": true,
+        "backgroundColor": "#080F19",
+        "focus": true,
+        "visible": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: http://asset.localhost; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/inbox/**"]
+      }
     }
   },
   "bundle": {
     "active": false,
-    "icon": [
-      "icons/icon.png",
-      "icons/icon.ico",
-      "icons/icon.icns"
-    ]
+    "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"]
   }
 }

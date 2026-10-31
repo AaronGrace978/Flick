@@ -30,4 +30,10 @@
     <string name="file_error">Cannot queue file: %1$s</string>
     <string name="invalid_pairing">Enter the desktop pairing code to transfer content (64 hexadecimal characters).</string>
     <string name="clear_payload">Clear queued content</string>
+    <string name="checking_link">○ CHECKING DESKTOP LINK</string>
+    <string name="checking_desktop">Checking desktop address and pairing code…</string>
+    <string name="desktop_paired">Desktop reachable. Pairing code accepted.</string>
+    <string name="connection_failed">Desktop connection failed. Check its address and firewall.</string>
+    <string name="connection_cancelled">Connection check cancelled.</string>
+    <string name="permission_granted">Microphone permission granted. Tap Connect to start listening.</string>
 </resources>

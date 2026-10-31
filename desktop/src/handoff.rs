@@ -12,6 +12,29 @@ use std::{
 pub const MAGIC: &[u8; 8] = b"FLICK001";
 pub const MAX_BYTES: u64 = 16 * 1024 * 1024;
 pub const MAX_TEXT: u64 = 256 * 1024;
+/// Respond to a pairing probe independently of audio, gestures, or file transfer.
+/// Both request and reply bind a fresh client nonce. Transport remains trusted-LAN.
+pub fn pairing_reply(request: &[u8], token: &[u8; 32], ready: bool) -> Option<[u8; 16]> {
+    if request.len() != 48 || &request[..8] != b"FLKPAIR1" {
+        return None;
+    }
+    let mismatch = request[16..]
+        .iter()
+        .zip(token)
+        .fold(0u8, |diff, (a, b)| diff | (a ^ b));
+    let status = if mismatch != 0 {
+        b"FLKPBAD1"
+    } else if !ready {
+        b"FLKPWAIT"
+    } else {
+        b"FLKPOK01"
+    };
+    let mut reply = [0; 16];
+    reply[..8].copy_from_slice(status);
+    reply[8..].copy_from_slice(&request[8..16]);
+    Some(reply)
+}
+
 #[derive(Debug)]
 pub enum Asset {
     Text(String),
@@ -220,6 +243,26 @@ mod tests {
         b.extend(name.as_bytes());
         b.extend(bytes);
         b
+    }
+    #[test]
+    fn pairing_probes_bind_nonce_and_report_key_or_readiness_errors() {
+        let mut request = Vec::from(*b"FLKPAIR1");
+        request.extend(42u64.to_be_bytes());
+        request.extend([7; 32]);
+        let good = pairing_reply(&request, &[7; 32], true).unwrap();
+        assert_eq!(&good[..8], b"FLKPOK01");
+        assert_eq!(&good[8..], &42u64.to_be_bytes());
+        assert_eq!(
+            &pairing_reply(&request, &[8; 32], true).unwrap()[..8],
+            b"FLKPBAD1"
+        );
+        assert_eq!(
+            &pairing_reply(&request, &[7; 32], false).unwrap()[..8],
+            b"FLKPWAIT"
+        );
+        assert!(pairing_reply(&request[..47], &[7; 32], true).is_none());
+        request[0] = 0;
+        assert!(pairing_reply(&request, &[7; 32], true).is_none());
     }
     #[test]
     fn authentic_text_and_invalid_frames() {

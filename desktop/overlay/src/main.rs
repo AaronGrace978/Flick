@@ -1,3 +1,4 @@
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 //! Transparent, non-activating overlay. UDP never performs blocking asset or UI work.
 mod native;
 use flick_radar::{
@@ -11,8 +12,9 @@ use std::{
     io::{self, Write},
     net::{SocketAddr, TcpListener, UdpSocket},
     path::PathBuf,
+    process::{Child, Command, Stdio},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc, Arc, Mutex,
     },
     time::{Duration, Instant},
@@ -31,6 +33,7 @@ struct AssetPayload {
     id: u64,
     label: String,
     angle: f32,
+    preview: Option<String>,
 }
 #[derive(Clone, Serialize)]
 struct StatusPayload {
@@ -49,6 +52,11 @@ struct Runtime {
     ready: AtomicBool,
     busy: AtomicBool,
     pending: Mutex<Option<Pending>>,
+    pairing_code: Mutex<String>,
+    beacon: Mutex<Option<Child>>,
+    paired_at: AtomicU64,
+    telemetry_at: AtomicU64,
+    started: Instant,
 }
 
 /// Only the trusted local webview can request this, after its asset animation ends.
@@ -56,9 +64,13 @@ struct Runtime {
 #[tauri::command]
 async fn complete_handoff(
     id: u64,
+    window: tauri::WebviewWindow,
     state: tauri::State<'_, Arc<Runtime>>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("Only the overlay can finish a handoff".into());
+    }
     let pending = {
         let mut slot = state.pending.lock().map_err(|_| "Handoff state poisoned")?;
         let p = slot.as_ref().ok_or("No received asset")?;
@@ -91,8 +103,143 @@ async fn complete_handoff(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-fn frontend_ready(state: tauri::State<'_, Arc<Runtime>>) {
-    state.ready.store(true, Ordering::Relaxed);
+fn frontend_ready(window: tauri::WebviewWindow, state: tauri::State<'_, Arc<Runtime>>) {
+    if window.label() == "main" {
+        state.ready.store(true, Ordering::Relaxed);
+    }
+}
+
+#[derive(Serialize)]
+struct DesktopStatus {
+    code: String,
+    address: Option<String>,
+    beacon: bool,
+    paired_age: Option<u64>,
+    telemetry_age: Option<u64>,
+    ready: bool,
+}
+#[tauri::command]
+fn desktop_status(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<Runtime>>,
+) -> Result<DesktopStatus, String> {
+    if window.label() != "control" {
+        return Err("Control window required".into());
+    }
+    let address = UdpSocket::bind("0.0.0.0:0")
+        .and_then(|s| {
+            s.connect("192.0.2.1:9")?;
+            s.local_addr()
+        })
+        .ok()
+        .map(|a| a.ip().to_string());
+    let now = state.started.elapsed().as_millis() as u64 + 1;
+    let age = |time: u64| {
+        if time == 0 {
+            None
+        } else {
+            Some(now.saturating_sub(time))
+        }
+    };
+    let mut beacon = state
+        .beacon
+        .lock()
+        .map_err(|_| "Beacon state unavailable")?;
+    let live = beacon
+        .as_mut()
+        .is_some_and(|child| matches!(child.try_wait(), Ok(None)));
+    if !live {
+        *beacon = None;
+    }
+    Ok(DesktopStatus {
+        code: state
+            .pairing_code
+            .lock()
+            .map_err(|_| "Pairing state unavailable")?
+            .clone(),
+        address,
+        beacon: live,
+        paired_age: age(state.paired_at.load(Ordering::Relaxed)),
+        telemetry_age: age(state.telemetry_at.load(Ordering::Relaxed)),
+        ready: state.ready.load(Ordering::Relaxed),
+    })
+}
+fn stop_child(slot: &mut Option<Child>) {
+    if let Some(mut child) = slot.take() {
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(b"\n");
+        }
+        let until = Instant::now() + Duration::from_secs(1);
+        while Instant::now() < until {
+            if !matches!(child.try_wait(), Ok(None)) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+fn stop_beacon(state: &Runtime) {
+    if let Ok(mut slot) = state.beacon.lock() {
+        stop_child(&mut slot);
+    }
+}
+
+#[tauri::command]
+async fn set_beacon(
+    enabled: bool,
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<Runtime>>,
+) -> Result<(), String> {
+    if window.label() != "control" {
+        return Err("Control window required".into());
+    }
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move||{
+        let mut slot=state.beacon.lock().map_err(|_|"Beacon state unavailable")?;
+        stop_child(&mut slot);
+        if enabled {
+            if !state.running.load(Ordering::Relaxed){return Err("Application is closing".into());}
+            let path=std::env::current_exe().map_err(|e|e.to_string())?.parent().ok_or("No application directory")?.join(format!("emitter{}",std::env::consts::EXE_SUFFIX));
+            let mut command=Command::new(path);
+            #[cfg(windows)] { use std::os::windows::process::CommandExt;command.creation_flags(0x08000000); }
+            let child=command.stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+                .map_err(|e|format!("Cannot start beacon: {e}. Keep emitter next to flick-overlay from the same desktop archive."))?;
+            *slot=Some(child);
+        }
+        Ok(())
+    }).await.map_err(|e|e.to_string())?
+}
+
+#[tauri::command]
+fn open_inbox(window: tauri::WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    if window.label() != "control" {
+        return Err("Control window required".into());
+    }
+    let path = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("inbox");
+    fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    let program = "explorer.exe";
+    #[cfg(target_os = "macos")]
+    let program = "open";
+    #[cfg(target_os = "linux")]
+    let program = "xdg-open";
+    let mut child = Command::new(program)
+        .arg(path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
 }
 
 fn pairing(directory: &std::path::Path) -> io::Result<[u8; 32]> {
@@ -170,6 +317,19 @@ fn serve(
             match result {
                 Ok((asset, target)) => {
                     let label = asset.label();
+                    let preview = match &asset {
+                        Asset::File(path)
+                            if path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                                matches!(
+                                    e.to_ascii_lowercase().as_str(),
+                                    "png" | "jpg" | "jpeg" | "webp" | "gif" | "avif"
+                                )
+                            }) =>
+                        {
+                            Some(path.to_string_lossy().into_owned())
+                        }
+                        _ => None,
+                    };
                     if let Ok(mut pending) = state.pending.lock() {
                         *pending = Some(Pending {
                             id,
@@ -178,7 +338,15 @@ fn serve(
                             ready: Instant::now(),
                         });
                     }
-                    if let Err(e) = app.emit("flick://asset", AssetPayload { id, label, angle }) {
+                    if let Err(e) = app.emit(
+                        "flick://asset",
+                        AssetPayload {
+                            id,
+                            label,
+                            angle,
+                            preview,
+                        },
+                    ) {
                         eprintln!("Asset UI delivery: {e}");
                     }
                 }
@@ -215,6 +383,20 @@ fn serve(
         for _ in 0..128 {
             match udp.recv_from(&mut bytes) {
                 Ok((n, peer)) => {
+                    if let Some(reply) = handoff::pairing_reply(
+                        &bytes[..n],
+                        &token,
+                        state.ready.load(Ordering::Relaxed),
+                    ) {
+                        if &reply[..8] == b"FLKPOK01" {
+                            state.paired_at.store(
+                                state.started.elapsed().as_millis() as u64 + 1,
+                                Ordering::Relaxed,
+                            );
+                        }
+                        let _ = udp.send_to(&reply, peer);
+                        continue;
+                    }
                     let Some(packet) = Packet::parse(&bytes[..n]) else {
                         continue;
                     };
@@ -226,6 +408,10 @@ fn serve(
                     if last.elapsed() > Duration::from_millis(150) {
                         engine.reset();
                     }
+                    state.telemetry_at.store(
+                        state.started.elapsed().as_millis() as u64 + 1,
+                        Ordering::Relaxed,
+                    );
                     last = Instant::now();
                     stale = false;
                     let gesture = engine.update(packet);
@@ -342,11 +528,21 @@ fn main() {
         ready: AtomicBool::new(false),
         busy: AtomicBool::new(false),
         pending: Mutex::new(None),
+        pairing_code: Mutex::new(String::new()),
+        beacon: Mutex::new(None),
+        paired_at: AtomicU64::new(0),
+        telemetry_at: AtomicU64::new(0),
+        started: Instant::now(),
     });
     let setup_state = runtime.clone();
     let application = tauri::Builder::default()
         .manage(runtime.clone())
-        .invoke_handler(tauri::generate_handler![frontend_ready, complete_handoff])
+        .invoke_handler(tauri::generate_handler![
+            frontend_ready,
+            complete_handoff,
+            desktop_status,
+            set_beacon, open_inbox
+        ])
         .setup(move |app| {
             let window = app
                 .get_webview_window("main")
@@ -371,6 +567,11 @@ fn main() {
             }
             let directory = app.path().app_data_dir()?;
             let token = pairing(&directory)?;
+            *setup_state
+                .pairing_code
+                .lock()
+                .map_err(|_| "Pairing state unavailable")? =
+                token.iter().map(|b| format!("{b:02x}")).collect();
             let udp = UdpSocket::bind("0.0.0.0:8089")?;
             udp.set_nonblocking(true)?;
             let handle = app.handle().clone();
@@ -380,13 +581,27 @@ fn main() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("Cannot initialize click-through overlay");
-    application.run(move |_, event| {
+        .unwrap_or_else(|error|{
+            native::startup_error(&format!("Flick could not start: {error}\n\nClose any older flick-overlay instance before opening this version. On Windows, ensure WebView2 is installed."));
+            std::process::exit(1)
+        });
+    application.run(move |handle, event| {
+        if let tauri::RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::CloseRequested { .. },
+            ..
+        } = &event
+        {
+            if label == "control" {
+                handle.exit(0);
+            }
+        }
         if matches!(
             event,
             tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
         ) {
             runtime.running.store(false, Ordering::Relaxed);
+            stop_beacon(&runtime);
         }
     });
 }

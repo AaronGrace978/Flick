@@ -90,5 +90,49 @@ fun main() {
         check(Handoff.capture(ack) == 42L)
         check(Handoff.capture(ByteBuffer.allocate(11)) == null)
     }
+    verify("Pairing probes bind nonce and reject malformed replies") {
+        val request=Handoff.pairRequest(ByteArray(32) { 7 }, 42)
+        check(request.remaining()==48 && request.getLong(8)==42L)
+        fun reply(name:String,nonce:Long)=ByteBuffer.allocate(16).put(name.toByteArray()).putLong(nonce).apply { flip() }
+        check(Handoff.pairReply(reply("FLKPOK01",42),42)==Handoff.PairReply.CONNECTED)
+        check(Handoff.pairReply(reply("FLKPBAD1",42),42)==Handoff.PairReply.REJECTED)
+        check(Handoff.pairReply(reply("FLKPWAIT",42),42)==Handoff.PairReply.WAITING)
+        check(Handoff.pairReply(reply("FLKPOK01",41),42)==null)
+        check(Handoff.pairReply(ByteBuffer.allocate(15),42)==null)
+    }
+    verify("Real UDP pairing succeeds without audio and reports wrong code and timeout") {
+        fun server(prefix:String?, test:(Int)->Unit) {
+            val socket=java.net.DatagramSocket(0,java.net.InetAddress.getByName("127.0.0.1"))
+            socket.soTimeout=100
+            val worker=Thread {
+                while (!socket.isClosed) {
+                    try {
+                        val p=java.net.DatagramPacket(ByteArray(64),64);socket.receive(p)
+                        if (prefix!=null && p.length==48) {
+                            val response=ByteBuffer.allocate(16).put(prefix.toByteArray())
+                                .put(p.data,8,8).array()
+                            socket.send(java.net.DatagramPacket(response,response.size,p.socketAddress))
+                        }
+                    } catch (_: java.net.SocketTimeoutException) { }
+                      catch (_: java.net.SocketException) { break }
+                }
+            }
+            worker.start()
+            try { test(socket.localPort) } finally { socket.close();worker.join(1000);check(!worker.isAlive) }
+        }
+        server("FLKPOK01") { PairingClient.check("127.0.0.1",ByteArray(32) { 7 },it,600) }
+        server("FLKPBAD1") {
+            val error=runCatching { PairingClient.check("127.0.0.1",ByteArray(32) { 7 },it,600) }.exceptionOrNull()
+            check(error?.message?.contains("Wrong pairing code")==true)
+        }
+        server(null) {
+            val error=runCatching { PairingClient.check("127.0.0.1",ByteArray(32) { 7 },it,200) }.exceptionOrNull()
+            check(error?.message?.contains("did not reply")==true)
+        }
+        server("FLKPWAIT") {
+            val error=runCatching { PairingClient.check("127.0.0.1",ByteArray(32) { 7 },it,200) }.exceptionOrNull()
+            check(error?.message?.contains("visual layer is not ready")==true)
+        }
+    }
     println("$passed core regression checks passed")
 }

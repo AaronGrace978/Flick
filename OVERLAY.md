@@ -1,7 +1,7 @@
 # Flick Visual Layer
 
 The Tauri 2 workspace member adds a non-activating, click-through desktop overlay,
-relative-displacement gesture detection and paired clipboard/file handoff. The
+relative-displacement gesture detection and paired clipboard/file handoff. A separate, visible Flick desktop control window shows pairing, sensor status and received images. The
 frontend is plain HTML/CSS/WebGL/JavaScript; no npm install or frontend bundler is
 needed to build the app. Tauri/Serde are intentional new dependencies of the GUI
 package; the terminal receiver remains usable without them.
@@ -21,12 +21,18 @@ Xcode command line tools. Use the same Cargo command there. Build an executable
 with `cargo build --release --locked -p flick-overlay`. Packaging/signing/notarization
 are separate distribution steps; bundling is disabled in this source configuration.
 
-Run the emitter in a second terminal (`cargo run --release --locked --bin emitter`).
+Open `flick-overlay` (`flick-overlay.exe` on Windows) to see the Flick control window.
+Click **Start beacon** there at low volume. Keep the `emitter` executable beside
+`flick-overlay` in the extracted desktop archive. For development, build the whole
+workspace first with `cargo build --workspace` so the emitter is available too.
 Use the overlay **instead of** the terminal receiver: both listen on UDP 8089.
 Allow UDP 8089 and TCP 8090 only on the trusted LAN. The TCP listener opens only
 for a capture, for five seconds; a connected transfer has a ten-second deadline.
-Stop the overlay with Ctrl-C in its launch terminal or the operating system's
-process manager. It has no focus-stealing control panel or global keyboard hook.
+Close the Flick control window to stop the app and its managed beacon. Windows
+release builds show the desktop window without opening console windows. The
+transparent visual layer remains non-focusable and click-through; the control
+window is a separate, normal desktop window. Minimize it and focus your destination
+application before flicking. The app installs no global keyboard hook.
 
 The window config contains the requested fullscreen, transparent, undecorated,
 always-on-top, skip-taskbar, fixed-size, non-focused flags. Setup additionally sets
@@ -40,8 +46,9 @@ behavior must still be validated on each OS/compositor used for distribution.
 ## Pair and hand off
 
 On first launch, the desktop creates an OS-random 256-bit pairing key in its app
-data directory and prints the **file path**, not its contents. Open `pairing.key`
-yourself and paste its 64 hex characters into Android's pairing field. Unix file
+data directory and prints the **file path**, not its contents. The same key is now visible in the desktop control window: click its field,
+copy the 64 characters, and paste them into Android's pairing field. You can also
+open `pairing.key` yourself. Unix file
 permissions are 0600. The key persists until removed; remove it while the overlay
 is stopped to re-pair. Never publish the key. Android holds it only for the session
 and masks the input. Leaving the field empty enables visuals without file transfer.
@@ -50,8 +57,10 @@ and masks the input. Leaving the field empty enables visuals without file transf
 2. Tap **Use clipboard** to explicitly queue text, or **Choose file** for the native
    document picker. Text is limited to 256 KiB, files to 16 MiB. Selection stages a
    bounded in-memory snapshot. Nothing scans storage or silently reads the clipboard.
-3. Tap **Connect and listen**, hold the phone stationary with the beacon on, then
-   calibrate. Both the app and transfer worker stop when leaving the foreground.
+3. Tap **Connect and listen**. The phone checks the address and key first, without
+   requiring audio or a gesture. It reports wrong codes, unreachable desktops and
+   an unready visual layer explicitly. After pairing, allow microphone access and
+   calibrate while stationary with the beacon on. Both the app and transfer worker stop when leaving the foreground.
 4. Focus the desired target application on the desktop. Hold the phone in a fixed,
    upright orientation and approach, then stop/reverse the flick. Positive X motion
    chooses the left edge; negative chooses the right, using gravity-subtracted
@@ -100,7 +109,11 @@ An approach lasting over 1.5 s cancels.
 Below the normalized 0.5 threshold, a cubic-Bezier Gaussian edge ridge increases
 amplitude toward the center. Its cyan premultiplied-alpha mesh is capped at 0.4 and
 has zero alpha at screen center. Capture adds an expanding edge splash, particles,
-and a glass-styled asset card. The app respects reduced-motion preferences for the
+and a glass-styled asset card. PNG/JPEG/WebP/GIF/AVIF files show the actual received
+image in the animation and in the desktop's persistent last-received panel.
+**Open received folder** opens the inbox in the native file manager. Preview access
+is scoped to the app's inbox through Tauri's asset protocol; it does not expose
+`pairing.key` or arbitrary files. The app respects reduced-motion preferences for the
 card trajectory and particles. Idle pixels are transparent, and both the native
 window and frontend ignore pointer input.
 
@@ -110,6 +123,12 @@ require a separate screen-capture pipeline and OS capture permissions, which thi
 implementation does not request.
 
 ## Transfer framing
+
+Before capture starts, Android sends a 48-byte UDP pairing probe: ASCII
+`FLKPAIR1`, a big-endian random u64 nonce, and the raw 32-byte pairing key. Desktop
+replies with eight ASCII status bytes (`FLKPOK01`, `FLKPBAD1`, or `FLKPWAIT`) followed
+by that nonce. A successful probe updates desktop pairing status, independently of
+audio. No reply within 3.5 seconds produces an address/firewall/version error.
 
 The original 24-byte telemetry packet is unchanged. Desktop replies from UDP 8089
 to that sender's source endpoint with 12 bytes: ASCII `FLK1`, then a big-endian u64
@@ -134,8 +153,7 @@ only after complete receipt and recovery storage; this means receipt, not succes
 paste. UDP, TCP and animation workers do not block one another. There are no
 retransmission queues. A failed transfer remains queued on Android for a new gesture.
 
-This is a **trusted-LAN protocol, not TLS**. The pairing key and content cross TCP
-in cleartext. The key prevents unauthenticated injection but not a LAN observer or
+This is a **trusted-LAN protocol, not TLS**. The pairing key crosses UDP/TCP and content crosses TCP in cleartext. The key prevents unauthenticated injection but not a LAN observer or
 active man-in-the-middle. Do not expose either port to the Internet. UDP gestures
 can still be spoofed to produce visual effects; a valid pairing key is required to
 supply an injectable payload. Deployment on untrusted networks needs authenticated
@@ -173,8 +191,8 @@ acceptance tests; the platform matrix in CI checks compilation, not physical use
 
 ### Current-instance results
 
-Linux Tauri compilation/linking and workspace Clippy passed. All eight Rust tests,
-ten Kotlin check groups, the real UDP smoke test, and the Chromium shader/animation
+Linux Tauri compilation/linking and workspace Clippy passed. All nine Rust tests,
+twelve Kotlin check groups, the real UDP smoke test, and the Chromium shader/animation
 regression passed. The Android debug APK built and Android lint reports no issues.
 The Win32 clipboard/input module also type-checks against Rust's Windows target.
 A native X11 end-to-end attempt was blocked by this non-root environment's relocated
@@ -182,3 +200,13 @@ WebKit installation: its helper executables require standard system paths. Thus
 native click-through, active-window paste, macOS permissions and real phone motion
 remain acceptance tests, not claimed successes. CI covers GUI compilation on all
 three operating systems; local browser tests use mocked Tauri IPC.
+
+### Upgrading from alpha.1
+
+Close both old console windows before opening the updated desktop app, otherwise
+the old overlay still owns UDP 8089. Install matching desktop and Android alpha.2
+builds: the old desktop does not answer the new pairing probe. Your existing
+desktop pairing key is retained. If Android rejects installation because the old
+debug APK has a different signing key, uninstall the old Flick APK first, then
+install the new one and re-enter the address/key. Received desktop files remain in
+the inbox. This is a debug-signed prerelease, not a production-signed update channel.

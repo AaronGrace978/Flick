@@ -1,59 +1,41 @@
-# v0.2.0-alpha.1 — Flick Visual Layer
+# v0.2.0-alpha.2 — Desktop UI and pairing fixes
 
-The first visual-overlay and paired-handoff prerelease. Experimental software;
-physical tracking accuracy and native OS handoff behavior still need device testing.
+This update fixes the missing desktop interface and silent pairing flow in alpha.1.
+Install matching desktop and Android builds; the old desktop cannot answer the new
+pairing check. **Close both old terminal windows before launching this version.**
 
-## Downloads
+## What changed
 
-- `flick-desktop-v0.2.0-alpha.1-<platform>-<architecture>.tar.gz` or `.zip`:
-  `flick-overlay` (transparent Tauri UI), `emitter` (20 kHz beacon), `receiver`
-  (terminal dashboard), setup guides, and GPL-3.0 license. Architecture is detected
-  from the build host rather than assumed.
-- `flick-android-v0.2.0-alpha.1.apk`: debug-signed Android app, API 26+. This is a
-  sideloadable development APK, not a production-signed app-store package.
-- `SHA256SUMS`: checksums for all downloadable binary assets.
-- Corresponding source is available through GitHub's source archives for this tag.
+- A visible Flick desktop window with LAN IPv4, selectable pairing code, pairing
+  age and live sensor-data indication. The transparent overlay remains separate.
+- Start/stop the beacon from the desktop window. Windows release builds no longer
+  open console windows; closing Flick stops its managed beacon.
+- Real address/key verification before microphone capture. Wrong code, timeout,
+  unready desktop and microphone failures produce visible feedback.
+- Android disabled buttons now look disabled, feedback appears by the controls,
+  and cancelled checks/permission prompts restore usable controls.
+- Actual received-image previews in the floating card and desktop window, with
+  an Open received folder button. Files are retained in the inbox.
+- Scoped image access and control-window-only access to pairing/beacon commands.
+- Nine Rust tests, twelve Kotlin check groups, browser UI/image checks, GUI build,
+  Android build and lint checks. Native desktop/device acceptance remains pending.
 
-Desktop executables are unsigned/unnotarized. Linux needs GTK3/WebKitGTK 4.1 and
-ALSA runtimes; Windows needs WebView2; macOS may request native automation/accessibility
-permissions. See OVERLAY.md before running the automatic paste workflow.
+## Downloads and upgrade
 
-## Changes since v0.1.0-alpha.2
+Desktop archives contain `flick-overlay`, `emitter`, `receiver`, guides and LICENSE.
+Keep these executables together. The Android APK is debug-signed for API 26+;
+if its signing key conflicts with your old APK, uninstall the old Flick APK first.
+The existing desktop pairing.key is retained. SHA256SUMS covers binary downloads;
+corresponding source is available from this tag's GitHub source archives.
 
-- Tauri workspace with transparent, always-on-top, click-through, non-focusable UI.
-- Cyan Gaussian/Bezier edge warp, capture splash, particles and a floating asset
-  card. The canvas is transparent at idle and avoids unnecessary idle GPU draws.
-- Gesture arming, relative-displacement integration, direction heuristic, reversal/
-  stop capture, stale-sample resets and cooldown.
-- Dark native Android console with explicit clipboard/file selection and pairing.
-- Bounded, non-blocking paired TCP handoff, receipt acknowledgement, inbox recovery
-  copies and native paste only after the asset animation completes.
-- Target-focus checks and platform-specific clipboard handling; failures preserve
-  received data instead of silently discarding it.
-- Rust gesture/framing/TCP tests, Kotlin matching-frame checks, real-browser visual
-  and animation checks, and GUI compilation jobs for Linux, Windows and macOS.
+## Limits
 
-## Validation and limits
+This is still an experimental alpha. A valid network pairing does not establish
+microphone ultrasonic support or tracking accuracy. The tone measures radial
+velocity and relative displacement, not absolute range. Native OS click-through,
+focus/paste permissions and physical device behavior require acceptance testing.
 
-Before tagging, Linux GUI linking, workspace Clippy, eight Rust tests, ten Kotlin
-check groups, Android APK build/lint, real UDP/TCP tests and Chromium visual tests
-passed. Win32 clipboard/input bindings type-checked. Release publication additionally
-waits for desktop builds/tests, Android checks and browser checks on GitHub Actions.
-
-Native X11 end-to-end testing was blocked by the cloud environment's relocated
-WebKit helper paths. Native click-through, OS paste permissions, physical phone
-tracking and Windows/macOS runtime behavior are not claimed as verified.
-
-A continuous tone measures radial velocity; integrated distance is a normalized
-relative displacement, not absolute range. The shader draws an illusion and does
-not capture or distort other applications' pixels. Raw device-axis acceleration
-provides a direction heuristic, not calibrated world-space position.
-
-Transfers are paired but unencrypted and intended only for a trusted LAN. UDP
-telemetry is unauthenticated. Received files and text recovery copies remain in
-app-data/inbox until manually removed. Wayland automatic paste is unsupported;
-X11 file paste depends on the target application's clipboard support. A successful
-paste command cannot prove every target application consumed the asset.
-
-Use low speaker volume. See README.md and OVERLAY.md for setup, protocol details,
-platform requirements and hardware acceptance checks.
+Transport is paired but unencrypted: use a trusted LAN and allow UDP 8089/TCP 8090
+on the private network. Desktop executables are unsigned/unnotarized. Linux needs
+GTK3/WebKitGTK 4.1, Windows needs WebView2, and native paste support varies by OS
+and target application. See OVERLAY.md for full instructions and platform limits.

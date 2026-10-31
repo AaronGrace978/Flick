@@ -8,5 +8,5 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 flick-radar = { path = "..", default-features = false }
-tauri = { version = "2", features = ["macos-private-api"] }
+tauri = { version = "2", features = ["macos-private-api", "protocol-asset"] }
 serde = { version = "1", features = ["derive"] }

@@ -2,7 +2,7 @@
 
 <img width="1408" height="768" alt="image" src="https://github.com/user-attachments/assets/18a2e436-4d4c-44a2-9a9d-fde243ae8e79" />
 
-**New: [Flick Visual Layer](OVERLAY.md)** — a Tauri click-through cyan edge overlay,
+**New: [Flick Visual Layer](OVERLAY.md)** — a visible desktop app plus a Tauri click-through cyan edge overlay,
 relative-displacement gestures, styled native Android controls, and paired text/file
 handoff with post-animation native paste. See that guide for GUI prerequisites,
 pairing, platform support, and the trusted-LAN transfer protocol.
@@ -16,6 +16,14 @@ Android uses platform hardware APIs and Kotlin/JDK standard libraries. No DSP,
 audio-processing, UI, networking or sensor-fusion framework is bundled.
 
 ## Quick start
+
+For the visual app, extract the matching desktop archive and open `flick-overlay`
+(`flick-overlay.exe` on Windows). Its window displays the desktop IPv4 and pairing
+code. Start the beacon there, connect the matching Android app, choose an image,
+and calibrate. Received photos show in the floating animation and the desktop's
+last-received panel. See [OVERLAY.md](OVERLAY.md) for setup and upgrade instructions.
+
+The following commands are for the terminal-only workflow.
 
 On the desktop, install stable Rust and the native audio prerequisites. Debian/
 Ubuntu needs `libasound2-dev` and `pkg-config`; Windows/macOS use CPAL's native
@@ -153,7 +161,7 @@ The receiver/library can be built without CPAL/native audio dependencies using
 `cargo test --locked --no-default-features` or
 `cargo build --release --locked --no-default-features --bin receiver`.
 
-`core:check` executes ten standard-library regression groups (not a zero-test
+`core:check` executes twelve standard-library regression groups (not a zero-test
 JUnit run): both capture rates, Doppler sign/interpolation, noise, clipping,
 competing tones, calibration, wire bytes, sensor freshness and sender freshness.
 Rust tests cover packet validation, ordering, relative-delay rejection, reconnects,
@@ -166,11 +174,11 @@ remote CI results are not claimed until that workflow runs.
 
 Verified in this Linux cloud instance:
 
-- Both Rust release binaries compiled; eight Rust regression tests passed.
+- Both Rust release binaries compiled; nine Rust regression tests passed.
 - Rust formatting and Clippy with warnings denied passed.
 - The real loopback UDP smoke test passed.
 - CPAL opened a 48 kHz ALSA null sink and exited cleanly on Enter.
-- Ten Kotlin core regression groups passed on the JVM.
+- Twelve Kotlin core regression groups passed on the JVM.
 - Android debug APK built; Android lint passed (see the generated report).
 - The checked-in Gradle wrapper downloaded and checksum-verified Gradle 8.9.
 

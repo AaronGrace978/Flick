@@ -23,6 +23,23 @@ object Handoff {
             .put("FLICK001".toByteArray(Charsets.US_ASCII)).put(code).putLong(id).put(asset.kind.toByte())
             .putShort(name.size.toShort()).putLong(asset.bytes.size.toLong()).put(name).apply { flip() }
     }
+    enum class PairReply { CONNECTED, REJECTED, WAITING }
+    fun pairRequest(code: ByteArray, nonce: Long): ByteBuffer {
+        require(code.size == 32)
+        return ByteBuffer.allocate(48).order(ByteOrder.BIG_ENDIAN)
+            .put("FLKPAIR1".toByteArray(Charsets.US_ASCII)).putLong(nonce).put(code).apply { flip() }
+    }
+    fun pairReply(buffer: ByteBuffer, nonce: Long): PairReply? {
+        if (buffer.remaining() != 16) return null
+        val name = ByteArray(8); buffer.get(name)
+        if (buffer.order(ByteOrder.BIG_ENDIAN).long != nonce) return null
+        return when (String(name, Charsets.US_ASCII)) {
+            "FLKPOK01" -> PairReply.CONNECTED
+            "FLKPBAD1" -> PairReply.REJECTED
+            "FLKPWAIT" -> PairReply.WAITING
+            else -> null
+        }
+    }
     fun capture(buffer: ByteBuffer): Long? {
         if (buffer.remaining() != 12) return null
         buffer.order(ByteOrder.BIG_ENDIAN)

@@ -4,6 +4,9 @@ import android.Manifest
 import android.app.Activity
 import android.content.*
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.drawable.StateListDrawable
+import java.util.concurrent.Future
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -22,6 +25,9 @@ class MainActivity : Activity() {
     private var foreground = false
     private var permissionPending = false
     private var stopping = false
+    private var connecting = false
+    private var connectGeneration = 0L
+    private var connectTask: Future<*>? = null
     private val queued = AtomicReference<OutgoingAsset?>(null)
     private val storage = Executors.newSingleThreadExecutor()
     private lateinit var status: TextView
@@ -44,8 +50,13 @@ class MainActivity : Activity() {
     }
     private fun button(resource: Int, primary: Boolean = false): Button = Button(this).apply {
         setText(resource); isAllCaps = false; textSize = 14f; minHeight = dp(50)
-        setTextColor(if (primary) Color.rgb(5, 22, 30) else ink)
-        background = surface(if (primary) cyan else Color.rgb(20, 35, 48), if (primary) cyan else Color.rgb(40, 67, 81))
+        setTextColor(ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf()),
+            intArrayOf(muted, if (primary) Color.rgb(5, 22, 30) else ink)))
+        background = StateListDrawable().apply {
+            addState(intArrayOf(-android.R.attr.state_enabled), surface(Color.rgb(19, 28, 39)))
+            addState(intArrayOf(android.R.attr.state_pressed), surface(Color.rgb(38, 120, 137)))
+            addState(intArrayOf(), surface(if (primary) cyan else Color.rgb(20, 35, 48), if (primary) cyan else Color.rgb(40, 67, 81)))
+        }
     }
     private fun section(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL; setPadding(dp(19), dp(14), dp(19), dp(17))
@@ -96,19 +107,17 @@ class MainActivity : Activity() {
         } }, LinearLayout.LayoutParams(-1, dp(43)).apply { topMargin = dp(8) })
         layout.addView(content)
         val controls = section()
+        status = text(R.string.initial_status, 12f, muted).apply { typeface = Typeface.MONOSPACE }
+        controls.addView(status)
         start = button(R.string.start_link, true).apply { setOnClickListener {
-            if (!validAddress()) return@setOnClickListener
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                permissionPending = true; requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
-            } else startCapture()
+            startCapture()
         } }
         stop = button(R.string.stop).apply { isEnabled = false; setOnClickListener { stopCapture() } }
         calibrate = button(R.string.calibrate).apply { isEnabled = false; setOnClickListener { pipeline?.calibrate() } }
         controls.addView(start); controls.addView(calibrate, LinearLayout.LayoutParams(-1, dp(49)).apply { topMargin = dp(8) })
         controls.addView(stop, LinearLayout.LayoutParams(-1, dp(49)).apply { topMargin = dp(8) })
         layout.addView(controls)
-        status = text(R.string.initial_status, 12f, muted).apply { typeface = Typeface.MONOSPACE; setPadding(0, dp(22), 0, dp(16)) }
-        layout.addView(status); layout.addView(text(R.string.footer, 10f, muted))
+        layout.addView(text(R.string.footer, 10f, muted))
         setContentView(ScrollView(this).apply {
             setBackgroundColor(Color.rgb(7, 12, 20)); addView(layout)
             if (android.os.Build.VERSION.SDK_INT >= 30) setOnApplyWindowInsetsListener { view, insets ->
@@ -154,26 +163,66 @@ class MainActivity : Activity() {
     private fun validAddress(): Boolean {
         val parts = address.text.toString().trim().split('.')
         val valid = parts.size == 4 && parts.all { it.isNotEmpty() && it.length <= 3 && it.all { c -> c in '0'..'9' } && it.toInt() in 0..255 } && parts[0].toInt() in 1..223 && parts[0].toInt() != 127
-        if (!valid) status.setText(R.string.invalid_address)
+        if (!valid) feedback(getString(R.string.invalid_address))
         return valid
     }
     private fun startCapture() {
-        if (!foreground || pipeline != null || !validAddress()) return
+        if (!foreground || pipeline != null || connecting || !validAddress()) return
         val host = address.text.toString().trim()
         val token = try { if (code.text.isBlank()) null else Handoff.token(code.text.toString().trim()) }
-            catch (_: IllegalArgumentException) { status.setText(R.string.invalid_pairing); return }
-        if (queued.get() != null && token == null) { status.setText(R.string.invalid_pairing); return }
+            catch (_: IllegalArgumentException) { feedback(getString(R.string.invalid_pairing)); return }
+        if (queued.get() != null && token == null) { feedback(getString(R.string.invalid_pairing)); return }
+        if (token == null) { launchCapture(host, null); return }
+        connecting = true
+        val generation = ++connectGeneration
+        start.isEnabled = false; address.isEnabled = false; code.isEnabled = false; stop.isEnabled = true
+        badge.setText(R.string.checking_link)
+        status.setText(R.string.checking_desktop)
+        connectTask = storage.submit {
+            val result = runCatching { PairingClient.check(host, token) }
+            runOnUiThread {
+                if (generation == connectGeneration && foreground) {
+                    connecting = false; connectTask = null
+                    if (result.isSuccess) {
+                        feedback(getString(R.string.desktop_paired))
+                        launchCapture(host, token)
+                    } else {
+                        idleControls()
+                        feedback(result.exceptionOrNull()?.message ?: getString(R.string.connection_failed))
+                    }
+                }
+            }
+        }
+    }
+    private fun feedback(message: String) {
+        status.text = message
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+    private fun idleControls() {
+        start.isEnabled = true; address.isEnabled = true; code.isEnabled = true
+        stop.isEnabled = false; calibrate.isEnabled = false; badge.setText(R.string.idle); radar.linked = false
+    }
+    private fun launchCapture(host: String, token: ByteArray?) {
+        if (!foreground) return
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            idleControls()
+            permissionPending=true
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO),1)
+            return
+        }
         getPreferences(MODE_PRIVATE).edit().putString("desktop", host).apply()
         lateinit var session: RadarPipeline
-        val report: (String) -> Unit = { message -> runOnUiThread { if (pipeline === session && !stopping) status.text = message } }
+        val report: (String) -> Unit = { message -> runOnUiThread { if (pipeline === session && !stopping) {
+            status.text = message
+            if (message.startsWith("Stopped:")) Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        } } }
         val transfer = token?.let { secret -> TransferClient(host, secret, { queued.get() }, { sent ->
             queued.compareAndSet(sent, null)
             runOnUiThread { if (queued.get() == null) payload.setText(R.string.no_payload) }
         }, report) }
         session = RadarPipeline(applicationContext, host, transfer, report, { runOnUiThread {
             if (pipeline === session) {
-                pipeline = null; stopping = false; start.isEnabled = true; address.isEnabled = true; code.isEnabled = true
-                stop.isEnabled = false; calibrate.isEnabled = false; badge.setText(R.string.idle); radar.linked = false
+                pipeline = null; stopping = false; idleControls()
                 window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             }
         } })
@@ -186,10 +235,17 @@ class MainActivity : Activity() {
         if (requestCode != 1) return
         val wanted = permissionPending; permissionPending = false
         if (foreground && wanted && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) startCapture()
-        else if (foreground) status.setText(R.string.permission_required)
+        else if (foreground) {
+            idleControls()
+            feedback(getString(if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) R.string.permission_granted else R.string.permission_required))
+        }
     }
     private fun stopCapture() {
         permissionPending = false
+        if (connecting) {
+            ++connectGeneration; connectTask?.cancel(true); connectTask = null; connecting = false
+            idleControls(); status.setText(R.string.connection_cancelled)
+        }
         if (pipeline == null || stopping) return
         stopping = true; stop.isEnabled = false; calibrate.isEnabled = false; status.setText(R.string.stopping); pipeline?.close()
     }

@@ -282,3 +282,26 @@ mod windows {
 }
 #[cfg(target_os = "windows")]
 pub use windows::{foreground, paste, CLIPBOARD_OWNER};
+
+/// Make startup failures visible in Windows GUI builds without a console.
+#[cfg(windows)]
+pub fn startup_error(message: &str) {
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn MessageBoxW(
+            owner: *mut std::ffi::c_void,
+            text: *const u16,
+            title: *const u16,
+            flags: u32,
+        ) -> i32;
+    }
+    let text: Vec<u16> = message.encode_utf16().chain([0]).collect();
+    let title: Vec<u16> = "Flick could not start".encode_utf16().chain([0]).collect();
+    unsafe {
+        MessageBoxW(std::ptr::null_mut(), text.as_ptr(), title.as_ptr(), 0x10);
+    }
+}
+#[cfg(not(windows))]
+pub fn startup_error(message: &str) {
+    eprintln!("{message}");
+}

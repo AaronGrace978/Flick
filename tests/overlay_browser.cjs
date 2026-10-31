@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
 const root = path.resolve(__dirname, '../desktop/overlay/ui');
 const server = http.createServer((request, response) => {
   const name = new URL(request.url, 'http://localhost').pathname.slice(1) || 'index.html';
-  if (!['index.html', 'style.css', 'overlay.js'].includes(name)) { response.writeHead(404).end(); return; }
+  if (!['index.html', 'style.css', 'overlay.js', 'control.html', 'control.css', 'control.js'].includes(name)) { response.writeHead(404).end(); return; }
   response.setHeader('Content-Type', name.endsWith('.js') ? 'application/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html');
   response.end(fs.readFileSync(path.join(root, name)));
 });
@@ -22,9 +22,17 @@ const server = http.createServer((request, response) => {
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => {
       const listeners = new Map(); window.calls = [];
+      const desktop={code:'07'.repeat(32),address:'192.168.1.42',beacon:false,paired_age:null,telemetry_age:null,ready:true};
       window.__TAURI__ = {
         event: { listen: async (name, handler) => { listeners.set(name, handler); return () => listeners.delete(name); } },
-        core: { invoke: async (name, payload) => { window.calls.push({ name, payload, time: performance.now() }); } }
+        core: {
+          convertFileSrc: path => { window.previewPath=path; return 'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="32"><rect width="48" height="32" fill="cyan"/></svg>'); },
+          invoke: async (name, payload) => {
+            window.calls.push({ name, payload, time: performance.now() });
+            if (name==='desktop_status')return {...desktop};
+            if (name==='set_beacon')desktop.beacon=payload.enabled;
+          }
+        }
       };
       window.emitTest = (name, payload) => listeners.get(name)?.({ payload });
     });
@@ -56,7 +64,26 @@ const server = http.createServer((request, response) => {
     assert.equal(calls.length, 1); assert.equal(calls[0].payload.id, 42);
     await page.evaluate(() => emitTest('flick://status', { id: 42, ok: true, message: 'Paste sent' }));
     assert.equal(await page.locator('#asset').getAttribute('class'), 'delivered');
+    await page.evaluate(() => emitTest('flick://asset', { id: 43, label: 'photo.png', angle: Math.PI, preview:'/inbox/capture-43-photo.png' }));
+    await page.waitForFunction(() => document.querySelector('#asset-preview').naturalWidth > 0);
+    assert.equal(await page.evaluate(() => window.previewPath), '/inbox/capture-43-photo.png');
+    assert.ok((await page.locator('#asset').getAttribute('class')).includes('has-preview'));
+    await page.goto(`http://127.0.0.1:${server.address().port}/control.html`);
+    await page.waitForFunction(() => document.querySelector('#address').value === '192.168.1.42');
+    assert.equal(await page.locator('#code').inputValue(), '07'.repeat(32));
+    assert.equal(await page.locator('#code').getAttribute('readonly'), '');
+    await page.locator('#beacon').click();
+    await page.waitForFunction(() => document.querySelector('#beacon').textContent === 'Stop beacon');
+    assert.ok(await page.evaluate(() => calls.some(c => c.name === 'set_beacon' && c.payload.enabled === true)));
+    await page.locator('#beacon').click();
+    await page.waitForFunction(() => document.querySelector('#beacon').textContent === 'Start beacon');
+    await page.evaluate(() => emitTest('flick://asset', {id:44,label:'phone-photo.png',preview:'/inbox/capture-44-phone-photo.png'}));
+    await page.waitForFunction(() => document.querySelector('#received-preview').naturalWidth > 0);
+    assert.equal(await page.locator('#received-name').textContent(),'phone-photo.png');
+    assert.equal(await page.locator('#received').getAttribute('hidden'),null);
+    await page.locator('#open-inbox').click();
+    assert.ok(await page.evaluate(() => calls.some(c=>c.name==='open_inbox')));
     assert.deepEqual(errors, []);
-    console.log('PASS browser: WebGL, idle transparency, click-through CSS, edge rendering, safe labels, single post-animation handoff');
+    console.log('PASS browser: overlay shader, safe labels, real image element, visible desktop pairing/status and beacon controls');
   } finally { if (browser) await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

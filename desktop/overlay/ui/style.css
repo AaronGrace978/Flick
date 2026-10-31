@@ -155,3 +155,19 @@ canvas {
   opacity: 0;
   transition: opacity 0.2s;
 }
+
+#asset-preview {
+  display: none;
+  width: 100%;
+  height: 160px;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #020a10;
+  margin-top: 16px;
+}
+#asset.has-preview #asset-preview {
+  display: block;
+}
+#asset.has-preview .card-body {
+  margin: 14px 0;
+}
