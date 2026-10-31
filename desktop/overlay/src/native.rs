@@ -318,21 +318,19 @@ pub use windows::{foreground, paste, CLIPBOARD_OWNER};
 
 /// Open a received PDF, Word document, MP3, or WAV with the default application.
 /// The caller has already restricted the path to one of those extensions.
+#[cfg(windows)]
 pub fn open_file(path: &std::path::Path) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        return windows::open_path(path);
-    }
+    windows::open_path(path)
+}
+#[cfg(not(windows))]
+pub fn open_file(path: &std::path::Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let program = "open";
     #[cfg(all(unix, not(target_os = "macos")))]
     let program = "xdg-open";
-    #[cfg(not(windows))]
-    {
-        let mut command = Command::new(program);
-        command.arg(path);
-        checked(command).map(|_| ())
-    }
+    let mut command = Command::new(program);
+    command.arg(path);
+    checked(command).map(|_| ())
 }
 
 /// Make startup failures visible in Windows GUI builds without a console.

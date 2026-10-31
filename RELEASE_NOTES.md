@@ -1,4 +1,7 @@
-# v0.4.0-alpha.1 — PDF, Word, MP3, and WAV
+# v0.4.0-alpha.2 — PDF, Word, MP3, and WAV
+
+Same handoff as alpha.1. Alpha.1 did not publish because the Windows build
+rejected a needless `return` in the file opener. This tag fixes that.
 
 Flick a photo, a PDF, a Word document, an MP3, or a WAV from the phone to the
 desktop. Use matching desktop and Android builds, and close the old desktop app
