@@ -2,6 +2,11 @@
 
 <img width="1408" height="768" alt="image" src="https://github.com/user-attachments/assets/18a2e436-4d4c-44a2-9a9d-fde243ae8e79" />
 
+**New: [Flick Visual Layer](OVERLAY.md)** — a Tauri click-through cyan edge overlay,
+relative-displacement gestures, styled native Android controls, and paired text/file
+handoff with post-animation native paste. See that guide for GUI prerequisites,
+pairing, platform support, and the trusted-LAN transfer protocol.
+
 A software-only ultrasonic Doppler proof of concept: a Rust desktop emits a
 20 kHz beacon, a native Android app estimates radial motion using Goertzel DSP,
 and a Rust dashboard receives 60 Hz UDP telemetry.
@@ -148,7 +153,7 @@ The receiver/library can be built without CPAL/native audio dependencies using
 `cargo test --locked --no-default-features` or
 `cargo build --release --locked --no-default-features --bin receiver`.
 
-`core:check` executes nine standard-library regression groups (not a zero-test
+`core:check` executes ten standard-library regression groups (not a zero-test
 JUnit run): both capture rates, Doppler sign/interpolation, noise, clipping,
 competing tones, calibration, wire bytes, sensor freshness and sender freshness.
 Rust tests cover packet validation, ordering, relative-delay rejection, reconnects,
@@ -161,11 +166,11 @@ remote CI results are not claimed until that workflow runs.
 
 Verified in this Linux cloud instance:
 
-- Both Rust release binaries compiled; three Rust regression tests passed.
+- Both Rust release binaries compiled; eight Rust regression tests passed.
 - Rust formatting and Clippy with warnings denied passed.
 - The real loopback UDP smoke test passed.
 - CPAL opened a 48 kHz ALSA null sink and exited cleanly on Enter.
-- Nine Kotlin core regression groups passed on the JVM.
+- Ten Kotlin core regression groups passed on the JVM.
 - Android debug APK built; Android lint passed (see the generated report).
 - The checked-in Gradle wrapper downloaded and checksum-verified Gradle 8.9.
 

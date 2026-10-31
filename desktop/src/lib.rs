@@ -190,3 +190,6 @@ mod tests {
         }
     }
 }
+
+pub mod gesture;
+pub mod handoff;

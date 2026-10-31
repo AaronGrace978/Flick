@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class RadarPipeline(
     context: Context,
     private val host: String,
+    private val transfer: TransferClient?,
     private val report: (String) -> Unit,
     private val onClosed: () -> Unit
 ) : AutoCloseable, SensorEventListener {
@@ -57,6 +58,7 @@ class RadarPipeline(
                 // UI accepts numeric IPv4 only, so initialization needs no DNS service.
                 val destination = InetSocketAddress(host, 8089)
                 val buffer = ByteBuffer.allocate(Telemetry.BYTES)
+                val response = ByteBuffer.allocate(64)
                 var sent = 0L
                 // A one-shot schedule is advanced by elapsed time; missed periods are skipped.
                 var deadline = SystemClock.elapsedRealtimeNanos()
@@ -70,6 +72,14 @@ class RadarPipeline(
                                 Telemetry.encode(buffer, sample!!)
                                 udp.send(buffer, destination) // would-block returns zero; drop it.
                                 sent = sample.time
+                            }
+                            repeat(4) {
+                                response.clear()
+                                val from = udp.receive(response)
+                                if (from == destination) {
+                                    response.flip()
+                                    Handoff.capture(response)?.let { id -> transfer?.capture(id) }
+                                }
                             }
                             val done = SystemClock.elapsedRealtimeNanos()
                             deadline = Telemetry.nextDeadline(deadline, done)
@@ -213,6 +223,7 @@ class RadarPipeline(
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         estimate = null
+        transfer?.close()
         control.execute {
             try {
                 sender.shutdownNow()

@@ -1,0 +1,12 @@
+[package]
+name = "flick-overlay"
+version = "0.2.0"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+flick-radar = { path = "..", default-features = false }
+tauri = { version = "2", features = ["macos-private-api"] }
+serde = { version = "1", features = ["derive"] }

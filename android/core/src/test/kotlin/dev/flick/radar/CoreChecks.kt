@@ -78,5 +78,17 @@ fun main() {
         check(!Imu(123).fresh(100_000_124))
         check(!Imu(123, Float.NaN).fresh(124))
     }
+    verify("Paired handoff header and capture control framing") {
+        val code = Handoff.token("07".repeat(32))
+        val header = Handoff.header(code, 42, OutgoingAsset(0, "", "hello".toByteArray()))
+        check(header.remaining() == 59)
+        check(header.getLong(40) == 42L && header.getLong(51) == 5L)
+        check(runCatching { Handoff.token("bad") }.isFailure)
+        check(runCatching { Handoff.header(code, 42, OutgoingAsset(1, "../bad", byteArrayOf())) }.isFailure)
+        check(runCatching { Handoff.header(code, 42, OutgoingAsset(0, "", ByteArray(Handoff.MAX_TEXT + 1))) }.isFailure)
+        val ack = ByteBuffer.allocate(12).putInt(0x464c4b31).putLong(42).apply { flip() }
+        check(Handoff.capture(ack) == 42L)
+        check(Handoff.capture(ByteBuffer.allocate(11)) == null)
+    }
     println("$passed core regression checks passed")
 }

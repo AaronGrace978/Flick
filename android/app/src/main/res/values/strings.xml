@@ -1,13 +1,33 @@
 <resources>
     <string name="app_name">Flick Radar</string>
-    <string name="intro">Flick acoustic Doppler\nUse low speaker volume. No absolute distance measurement.\nConnect both devices to the same trusted LAN.</string>
     <string name="desktop_hint">Desktop LAN IPv4 address</string>
     <string name="initial_status">Start the desktop beacon and receiver, then tap Start.</string>
-    <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="calibrate">Calibrate stationary baseline</string>
     <string name="invalid_address">Enter a desktop unicast LAN IPv4 address</string>
     <string name="starting">Starting microphone and sensors…</string>
     <string name="permission_required">Microphone permission is required. Tap Start to retry.</string>
     <string name="stopping">Stopping…</string>
+    <string name="brand">FLICK / SENSOR CONSOLE</string>
+    <string name="hero">Across the edge.</string>
+    <string name="hero_subtitle">A gesture. A seamless handoff.</string>
+    <string name="idle">○ IDLE / READY TO CONNECT</string>
+    <string name="listening">● LISTENING / 20 KHZ</string>
+    <string name="connection_section">01 / DESKTOP LINK</string>
+    <string name="pairing_hint">Desktop pairing code (64 characters)</string>
+    <string name="pairing_help">Open pairing.key on your desktop. Leave blank for visuals only. Choose content before starting.</string>
+    <string name="payload_section">02 / CHOOSE WHAT CROSSES</string>
+    <string name="no_payload">No payload queued · visual gestures still work</string>
+    <string name="queue_clipboard">Use clipboard</string>
+    <string name="queue_file">Choose file ↗</string>
+    <string name="start_link">Connect and listen ↗</string>
+    <string name="footer">TRUSTED LAN ONLY / LOW SPEAKER VOLUME / NO ABSOLUTE RANGING</string>
+    <string name="empty_clipboard">Copy some text first, then tap Use clipboard.</string>
+    <string name="payload_too_large">Text must be valid, without NUL, and at most 256 KiB.</string>
+    <string name="clipboard_queued">Clipboard text · queued for one handoff</string>
+    <string name="preparing_file">Preparing selected file…</string>
+    <string name="file_ready">File queued. Connect, calibrate stationary, then flick.</string>
+    <string name="file_error">Cannot queue file: %1$s</string>
+    <string name="invalid_pairing">Enter the desktop pairing code to transfer content (64 hexadecimal characters).</string>
+    <string name="clear_payload">Clear queued content</string>
 </resources>

@@ -1,6 +1,6 @@
 [package]
 name = "flick-radar"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
@@ -13,3 +13,8 @@ audio = ["dep:cpal"]
 [[bin]]
 name = "emitter"
 required-features = ["audio"]
+
+[workspace]
+members = ["overlay"]
+default-members = ["."]
+resolver = "2"

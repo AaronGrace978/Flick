@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Flick visual layer</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <canvas id="warp" aria-hidden="true"></canvas
+    ><canvas id="particles" aria-hidden="true"></canvas>
+    <div id="asset" role="status" aria-live="polite">
+      <div class="shine"></div>
+      <div class="eyebrow">
+        <span class="signal"></span> FLICK / INBOUND <span id="number">01</span>
+      </div>
+      <div class="card-body">
+        <div class="icon">
+          <svg
+            width="25"
+            height="25"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M5 4v10h14M13 8l6 6-6 6"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </div>
+        <div class="copy">
+          <div id="asset-name"></div>
+          <div id="asset-state">Crossing the boundary</div>
+        </div>
+        <div class="check">✓</div>
+      </div>
+      <div class="foot">
+        <span>LOCAL CHANNEL</span><span id="channel-state">CAPTURED</span>
+      </div>
+      <div class="progress"></div>
+    </div>
+    <div id="notice" role="status"></div>
+    <script src="overlay.js"></script>
+  </body>
+</html>
