@@ -1,5 +1,7 @@
 # Flick acoustic Doppler
 
+<img width="1408" height="768" alt="image" src="https://github.com/user-attachments/assets/18a2e436-4d4c-44a2-9a9d-fde243ae8e79" />
+
 A software-only ultrasonic Doppler proof of concept: a Rust desktop emits a
 20 kHz beacon, a native Android app estimates radial motion using Goertzel DSP,
 and a Rust dashboard receives 60 Hz UDP telemetry.
