@@ -10,7 +10,23 @@ use std::{
     time::{Duration, Instant},
 };
 pub const MAGIC: &[u8; 8] = b"FLICK001";
-pub const MAX_BYTES: u64 = 16 * 1024 * 1024;
+pub const MAX_BYTES: u64 = 64 * 1024 * 1024;
+/// How the desktop should present a received file. Images preview in the card.
+/// PDF, Word, MP3 and WAV open in the operating system's default application.
+pub fn presentation(path: &Path) -> Option<&'static str> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    Some(match ext.as_str() {
+        "png" | "jpg" | "jpeg" | "webp" | "gif" | "avif" => "image",
+        "pdf" => "pdf",
+        "doc" | "docx" => "doc",
+        "mp3" => "mp3",
+        "wav" | "wave" => "wav",
+        _ => return None,
+    })
+}
+pub fn opens_with_default_app(path: &Path) -> bool {
+    matches!(presentation(path), Some("pdf" | "doc" | "mp3" | "wav"))
+}
 pub const MAX_TEXT: u64 = 256 * 1024;
 /// Authenticate an explicit manual-send request without depending on acoustic data.
 pub fn manual_request(request: &[u8], token: &[u8; 32]) -> Option<(u64, bool)> {
@@ -328,6 +344,34 @@ mod tests {
             panic!("Expected file")
         };
         assert_eq!(fs::read(path).unwrap(), b"abc");
+        for (name, kind) in [
+            ("song.mp3", "mp3"),
+            ("clip.wav", "wav"),
+            ("clip.WAVE", "wav"),
+            ("notes.pdf", "pdf"),
+            ("brief.doc", "doc"),
+            ("brief.DOCX", "doc"),
+            ("photo.PNG", "image"),
+        ] {
+            let asset = decode(&mut Cursor::new(frame(1, name, b"x")), &[7; 32], 42, &dir).unwrap();
+            let Asset::File(path) = asset else {
+                panic!("Expected file")
+            };
+            assert_eq!(presentation(&path), Some(kind), "{name}");
+            assert_eq!(opens_with_default_app(&path), kind != "image");
+            fs::remove_file(path).unwrap();
+        }
+        let program = decode(
+            &mut Cursor::new(frame(1, "run.exe", b"x")),
+            &[7; 32],
+            42,
+            &dir,
+        )
+        .unwrap();
+        let Asset::File(path) = program else {
+            panic!("Expected file")
+        };
+        assert!(!opens_with_default_app(&path));
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]

@@ -279,9 +279,61 @@ mod windows {
     }
     pub static CLIPBOARD_OWNER: std::sync::atomic::AtomicIsize =
         std::sync::atomic::AtomicIsize::new(0);
+    pub fn open_path(path: &std::path::Path) -> Result<(), String> {
+        use std::os::windows::ffi::OsStrExt;
+        #[link(name = "shell32")]
+        unsafe extern "system" {
+            fn ShellExecuteW(
+                hwnd: *mut c_void,
+                verb: *const u16,
+                file: *const u16,
+                params: *const u16,
+                dir: *const u16,
+                show: i32,
+            ) -> isize;
+        }
+        let file: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+        let verb: Vec<u16> = "open".encode_utf16().chain([0]).collect();
+        let code = unsafe {
+            ShellExecuteW(
+                std::ptr::null_mut(),
+                verb.as_ptr(),
+                file.as_ptr(),
+                std::ptr::null(),
+                std::ptr::null(),
+                1,
+            )
+        };
+        if code > 32 {
+            Ok(())
+        } else {
+            Err(format!(
+                "Windows could not open the file ({code}). It remains in the inbox."
+            ))
+        }
+    }
 }
 #[cfg(target_os = "windows")]
 pub use windows::{foreground, paste, CLIPBOARD_OWNER};
+
+/// Open a received PDF, Word document, MP3, or WAV with the default application.
+/// The caller has already restricted the path to one of those extensions.
+pub fn open_file(path: &std::path::Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        return windows::open_path(path);
+    }
+    #[cfg(target_os = "macos")]
+    let program = "open";
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let program = "xdg-open";
+    #[cfg(not(windows))]
+    {
+        let mut command = Command::new(program);
+        command.arg(path);
+        checked(command).map(|_| ())
+    }
+}
 
 /// Make startup failures visible in Windows GUI builds without a console.
 #[cfg(windows)]

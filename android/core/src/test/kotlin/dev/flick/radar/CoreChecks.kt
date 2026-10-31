@@ -98,6 +98,10 @@ fun main() {
         check(header.remaining() == 59)
         check(header.getLong(40) == 42L && header.getLong(51) == 5L)
         check(runCatching { Handoff.token("bad") }.isFailure)
+        for (name in arrayOf("song.mp3", "clip.wav", "notes.pdf", "brief.doc", "brief.docx")) {
+            val header = Handoff.header(code, 42, OutgoingAsset(1, name, byteArrayOf(1)))
+            check(header.remaining() == 59 + name.length) { name }
+        }
         check(runCatching { Handoff.header(code, 42, OutgoingAsset(1, "../bad", byteArrayOf())) }.isFailure)
         check(runCatching { Handoff.header(code, 42, OutgoingAsset(0, "", ByteArray(Handoff.MAX_TEXT + 1))) }.isFailure)
         val ack = ByteBuffer.allocate(12).putInt(0x464c4b31).putLong(42).apply { flip() }

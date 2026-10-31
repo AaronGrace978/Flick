@@ -179,7 +179,7 @@ class MainActivity : Activity() {
                     val output = ByteArrayOutputStream(); val chunk = ByteArray(8192)
                     while (!Thread.currentThread().isInterrupted) {
                         val n = stream.read(chunk); if (n < 0) break
-                        check(output.size() + n <= Handoff.MAX_BYTES) { "Files must be at most 16 MiB" }
+                        check(output.size() + n <= Handoff.MAX_BYTES) { "Files must be at most 64 MiB" }
                         output.write(chunk, 0, n)
                     }
                     check(!Thread.currentThread().isInterrupted); output.toByteArray()

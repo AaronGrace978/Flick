@@ -119,13 +119,19 @@ function receiveAsset(data) {
   document.querySelector("#channel-state").textContent = "CAPTURED";
   card.className = "";
   const preview = document.querySelector("#asset-preview");
+  const kind = document.querySelector("#asset-kind");
+  const kinds = { pdf: "PDF", doc: "WORD", mp3: "MP3", wav: "WAV" };
   preview.removeAttribute("src");
+  kind.textContent = "";
   if (
     typeof data.preview === "string" &&
     window.__TAURI__?.core.convertFileSrc
   ) {
     preview.src = window.__TAURI__.core.convertFileSrc(data.preview);
     card.classList.add("has-preview");
+  } else if (typeof data.kind === "string" && kinds[data.kind]) {
+    kind.textContent = kinds[data.kind];
+    card.classList.add("has-kind");
   }
   const cardHeight = card.offsetHeight;
   const edge = edgePoint(data.angle),

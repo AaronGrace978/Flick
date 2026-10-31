@@ -72,6 +72,10 @@ const server = http.createServer((request, response) => {
     await page.evaluate(() => emitTest('flick://status',{id:43,ok:true,message:'Saved in inbox'}));
     assert.equal(await page.locator('#channel-state').textContent(),'RECEIVED');
     assert.equal(await page.locator('#asset-state').textContent(),'Saved in desktop inbox');
+    await page.evaluate(() => emitTest('flick://asset', { id: 50, label: 'song.mp3', angle: Math.PI, kind: 'mp3' }));
+    assert.equal(await page.locator('#asset-kind').textContent(), 'MP3');
+    assert.ok((await page.locator('#asset').getAttribute('class')).includes('has-kind'));
+    assert.equal(await page.locator('#asset-preview').getAttribute('src'), null);
     await page.goto(`http://127.0.0.1:${server.address().port}/control.html`);
     await page.waitForFunction(() => document.querySelector('#address').value === '192.168.1.42');
     assert.equal(await page.locator('#code').inputValue(), '07'.repeat(32));
@@ -90,6 +94,13 @@ const server = http.createServer((request, response) => {
     await page.evaluate(() => emitTest('flick://asset', {id:44,label:'phone-photo.png',preview:'/inbox/capture-44-phone-photo.png'}));
     await page.waitForFunction(() => document.querySelector('#received-preview').naturalWidth > 0);
     assert.equal(await page.locator('#received-name').textContent(),'phone-photo.png');
+    assert.equal(await page.locator('#received-kind').getAttribute('hidden'), '');
+    for (const [kind, label, name] of [['pdf','PDF document','notes.pdf'],['doc','Word document','brief.docx'],['mp3','MP3 audio','song.mp3'],['wav','WAV audio','clip.wav']]) {
+      await page.evaluate(({kind, name}) => emitTest('flick://asset', {id:47,label:name,kind}), {kind, name});
+      assert.equal(await page.locator('#received-kind').textContent(), label);
+      assert.equal(await page.locator('#received-name').textContent(), name);
+      assert.equal(await page.locator('#received-preview').getAttribute('src'), null);
+    }
     assert.equal(await page.locator('#received').getAttribute('hidden'),null);
     await page.locator('#open-inbox').click();
     assert.ok(await page.evaluate(() => calls.some(c=>c.name==='open_inbox')));

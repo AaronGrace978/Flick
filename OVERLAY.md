@@ -82,7 +82,9 @@ and masks the input. Leaving the field empty enables visuals without file transf
 
 1. Enter the desktop LAN IPv4 address in the Android app.
 2. Tap **Use clipboard** to explicitly queue text, or **Choose file** for the native
-   document picker. Text is limited to 256 KiB, files to 16 MiB. Selection stages a
+   document picker. Photos, PDF, Word (`.doc` and `.docx`), MP3, and WAV are the
+   supported handoff types, and any other non-executable file still transfers.
+   Text is limited to 256 KiB, files to 64 MiB. Selection stages a
    bounded in-memory snapshot. Nothing scans storage or silently reads the clipboard.
 3. Tap **Connect and listen**. The phone checks the address and key first, without
    requiring audio or a gesture. It reports wrong codes, unreachable desktops and
@@ -153,6 +155,10 @@ amplitude toward the center. Its cyan premultiplied-alpha mesh is capped at 0.4 
 has zero alpha at screen center. Capture adds an expanding edge splash, particles,
 and a glass-styled asset card. PNG/JPEG/WebP/GIF/AVIF files show the actual received
 image in the animation and in the desktop's persistent last-received panel.
+PDF, Word, MP3, and WAV files show a type plate instead, then open in the
+operating system's default application. A copy remains in the inbox either way.
+Other files are saved and can be pasted, but they are not opened automatically.
+
 **Open received folder** opens the inbox in the native file manager. Preview access
 is scoped to the app's inbox through Tauri's asset protocol; it does not expose
 `pairing.key` or arbitrary files. The app respects reduced-motion preferences for the

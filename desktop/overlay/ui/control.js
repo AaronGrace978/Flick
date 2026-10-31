@@ -106,11 +106,23 @@ async function start() {
       document.querySelector("#received").hidden = false;
       document.querySelector("#received-name").textContent = data.label;
       const image = document.querySelector("#received-preview");
+      const kinds = {
+        pdf: "PDF document",
+        doc: "Word document",
+        mp3: "MP3 audio",
+        wav: "WAV audio",
+      };
+      const kind = document.querySelector("#received-kind");
       image.removeAttribute("src");
       image.style.display = "none";
+      kind.hidden = true;
+      kind.textContent = "";
       if (typeof data.preview === "string") {
         image.src = window.__TAURI__.core.convertFileSrc(data.preview);
         image.style.display = "block";
+      } else if (typeof data.kind === "string" && kinds[data.kind]) {
+        kind.hidden = false;
+        kind.textContent = kinds[data.kind];
       }
     })(),
   );

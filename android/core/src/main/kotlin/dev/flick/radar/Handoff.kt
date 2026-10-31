@@ -6,7 +6,7 @@ import java.nio.ByteOrder
 /** Explicitly chosen single-use payload. Nothing reads storage/clipboard implicitly. */
 data class OutgoingAsset(val kind: Int, val name: String, val bytes: ByteArray)
 object Handoff {
-    const val MAX_BYTES = 16 * 1024 * 1024
+    const val MAX_BYTES = 64 * 1024 * 1024
     const val MAX_TEXT = 256 * 1024
     fun token(hex: String): ByteArray {
         require(hex.matches(Regex("[0-9a-fA-F]{64}"))) { "Pairing code must contain 64 hexadecimal characters" }

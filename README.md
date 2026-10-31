@@ -19,9 +19,12 @@ audio-processing, UI, networking or sensor-fusion framework is bundled.
 
 For the visual app, extract the matching desktop archive and open `flick-overlay`
 (`flick-overlay.exe` on Windows). Its window displays the desktop IPv4 and pairing
-code. Start the beacon there, connect the matching Android app, choose an image,
-and calibrate for gesture transfer, or tap Send to inbox now to test file delivery directly. Received photos show in the floating animation and the desktop's
-last-received panel. See [OVERLAY.md](OVERLAY.md) for setup and upgrade instructions.
+code. Start the beacon there, connect the matching Android app, and choose a
+photo, PDF, Word document, MP3, or WAV. Calibrate for gesture transfer, or tap
+Send to inbox now to test delivery directly. Photos show in the floating card.
+PDF, Word, MP3, and WAV files open in the desktop's default app, and every file
+is kept in the inbox. A file can be up to 64 MiB. See [OVERLAY.md](OVERLAY.md)
+for setup and upgrade instructions.
 
 The following commands are for the terminal-only workflow.
 

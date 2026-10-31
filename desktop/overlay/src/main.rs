@@ -37,6 +37,8 @@ struct AssetPayload {
     label: String,
     angle: f32,
     preview: Option<String>,
+    /// pdf, doc, mp3, or wav. Images use preview instead.
+    kind: Option<&'static str>,
     manual: bool,
 }
 #[derive(Clone, Serialize)]
@@ -86,11 +88,19 @@ async fn complete_handoff(
     };
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let result = if pending.manual {Ok(())} else {pending.target.and_then(|target|native::paste(&pending.asset,target))};
-        let message = match &result {
-            Ok(_) if pending.manual => "Image/file received and saved in inbox; manual transfer does not paste into another app".into(),
-            Ok(_) => "Clipboard populated; paste sent to the active target".into(),
-            Err(e) => format!("{e}. Received items remain in the inbox."),
+        let open_locally = matches!(&pending.asset, Asset::File(path) if handoff::opens_with_default_app(path));
+        let result = match &pending.asset {
+            Asset::File(path) if open_locally => native::open_file(path),
+            _ if pending.manual => Ok(()),
+            _ => pending
+                .target
+                .and_then(|target| native::paste(&pending.asset, target)),
+        };
+        let message = match (&result, open_locally, pending.manual) {
+            (Ok(()), true, _) => "Opened with the default app. A copy stays in the inbox.".into(),
+            (Ok(()), false, true) => "File received and saved in the inbox. Manual transfer does not paste into another app.".into(),
+            (Ok(()), false, false) => "Clipboard populated; paste sent to the active target".into(),
+            (Err(e), _, _) => format!("{e}. Received items remain in the inbox."),
         };
         let _ = app.emit(
             "flick://status",
@@ -324,19 +334,17 @@ fn serve(
             match result {
                 Ok((asset, target)) => {
                     let label = asset.label();
-                    let preview = match &asset {
-                        Asset::File(path)
-                            if path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
-                                matches!(
-                                    e.to_ascii_lowercase().as_str(),
-                                    "png" | "jpg" | "jpeg" | "webp" | "gif" | "avif"
-                                )
-                            }) =>
-                        {
+                    let presented = match &asset {
+                        Asset::File(path) => handoff::presentation(path),
+                        Asset::Text(_) => None,
+                    };
+                    let preview = match (&asset, presented) {
+                        (Asset::File(path), Some("image")) => {
                             Some(path.to_string_lossy().into_owned())
                         }
                         _ => None,
                     };
+                    let kind = presented.filter(|kind| *kind != "image");
                     if let Ok(mut pending) = state.pending.lock() {
                         *pending = Some(Pending {
                             id,
@@ -353,6 +361,7 @@ fn serve(
                             label,
                             angle,
                             preview,
+                            kind,
                             manual,
                         },
                     ) {

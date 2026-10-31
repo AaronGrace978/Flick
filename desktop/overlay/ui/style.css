@@ -171,3 +171,23 @@ canvas {
 #asset.has-preview .card-body {
   margin: 14px 0;
 }
+#asset-kind {
+  display: none;
+  margin-top: 16px;
+  height: 96px;
+  border-radius: 12px;
+  border: 1px solid #00f0ff44;
+  background: linear-gradient(135deg, #00f0ff18, #071019);
+  color: #00f0ff;
+  font:
+    600 28px/96px Consolas,
+    monospace;
+  letter-spacing: 4px;
+  text-align: center;
+}
+#asset.has-kind #asset-kind {
+  display: block;
+}
+#asset.has-kind .card-body {
+  margin: 14px 0;
+}
