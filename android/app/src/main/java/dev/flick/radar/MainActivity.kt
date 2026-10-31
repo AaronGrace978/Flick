@@ -21,7 +21,12 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** Dark native console; content is queued explicitly before any gesture-driven transfer. */
 class MainActivity : Activity() {
+    private data class Draft(val host:String,val code:String,val asset:OutgoingAsset?)
+    private var restoredDraft:Draft?=null
     private var pipeline: RadarPipeline? = null
+    private var manualTransfer: TransferClient? = null
+    private lateinit var sendNow: Button
+    private lateinit var transferStatus: TextView
     private var foreground = false
     private var permissionPending = false
     private var stopping = false
@@ -65,6 +70,8 @@ class MainActivity : Activity() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        restoredDraft=lastNonConfigurationInstance as? Draft
+        queued.set(restoredDraft?.asset)
         if (android.os.Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(20), dp(24), dp(32))
@@ -81,19 +88,23 @@ class MainActivity : Activity() {
         address = EditText(this).apply {
             setHint(R.string.desktop_hint); setTextColor(ink); setHintTextColor(muted)
             textSize = 17f; inputType = InputType.TYPE_CLASS_PHONE; setSingleLine()
-            setText(getPreferences(MODE_PRIVATE).getString("desktop", ""))
+            setText(restoredDraft?.host ?: getPreferences(MODE_PRIVATE).getString("desktop", ""))
         }
         code = EditText(this).apply {
             setHint(R.string.pairing_hint); setTextColor(ink); setHintTextColor(muted); textSize = 13f
             typeface = Typeface.MONOSPACE; setSingleLine()
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+            isSaveEnabled=false // Keep the key in RAM, never hierarchy-state disk snapshots.
+            setText(restoredDraft?.code.orEmpty())
         }
         connection.addView(address); connection.addView(code)
         connection.addView(text(R.string.pairing_help, 11f, muted)); layout.addView(connection)
         val content = section()
         content.addView(text(R.string.payload_section, 10f, muted).apply { letterSpacing = .18f })
-        payload = text(R.string.no_payload, 13f); content.addView(payload)
+        payload = text(R.string.no_payload, 13f)
+        restoredDraft?.asset?.let { if(it.kind==1)payload.text=it.name else payload.setText(R.string.clipboard_queued) }
+        content.addView(payload)
         val actions = LinearLayout(this)
         actions.addView(button(R.string.queue_clipboard).apply { setOnClickListener { queueClipboard() } }, LinearLayout.LayoutParams(0, dp(49), 1f))
         actions.addView(button(R.string.queue_file).apply { setOnClickListener {
@@ -102,6 +113,9 @@ class MainActivity : Activity() {
             }, 2)
         } }, LinearLayout.LayoutParams(0, dp(49), 1f).apply { leftMargin = dp(8) })
         content.addView(actions)
+        sendNow=button(R.string.send_now,true).apply {setOnClickListener {sendToInbox()}}
+        content.addView(sendNow,LinearLayout.LayoutParams(-1,dp(49)).apply {topMargin=dp(8)})
+        transferStatus=text(R.string.transfer_idle,12f,muted);content.addView(transferStatus)
         content.addView(button(R.string.clear_payload).apply { setOnClickListener {
             queued.set(null); payload.setText(R.string.no_payload); stopCapture()
         } }, LinearLayout.LayoutParams(-1, dp(43)).apply { topMargin = dp(8) })
@@ -109,6 +123,7 @@ class MainActivity : Activity() {
         val controls = section()
         status = text(R.string.initial_status, 12f, muted).apply { typeface = Typeface.MONOSPACE }
         controls.addView(status)
+        if(restoredDraft!=null)status.setText(R.string.draft_restored)
         start = button(R.string.start_link, true).apply { setOnClickListener {
             startCapture()
         } }
@@ -127,13 +142,26 @@ class MainActivity : Activity() {
             }
         })
     }
+    private fun sendToInbox() {
+        if(!foreground || manualTransfer!=null || !validAddress())return
+        if(queued.get()==null){feedback(getString(R.string.select_payload));return}
+        val secret=try {Handoff.token(code.text.toString().trim())}catch(_:IllegalArgumentException){feedback(getString(R.string.invalid_pairing));return}
+        lateinit var client:TransferClient
+        client=TransferClient(address.text.toString().trim(),secret,{queued.get()},{asset->
+            queued.compareAndSet(asset,null)
+            runOnUiThread {if(queued.get()==null)payload.setText(R.string.no_payload)}
+        },{message->runOnUiThread {if(manualTransfer===client){transferStatus.text=message;Toast.makeText(this,message,Toast.LENGTH_LONG).show()}}},
+        finished={runOnUiThread {if(manualTransfer===client){manualTransfer=null;sendNow.isEnabled=true;client.close()}}})
+        manualTransfer=client;sendNow.isEnabled=false;transferStatus.setText(R.string.preparing_send)
+        client.sendNow()
+    }
     private fun queueClipboard() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val value = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
         if (value.isNullOrEmpty()) { status.setText(R.string.empty_clipboard); return }
         val bytes = value.toByteArray(Charsets.UTF_8)
         if (bytes.size > Handoff.MAX_TEXT || value.contains('\u0000')) { status.setText(R.string.payload_too_large); return }
-        queued.set(OutgoingAsset(0, "", bytes)); payload.setText(R.string.clipboard_queued)
+        queued.set(OutgoingAsset(0, "", bytes)); payload.setText(R.string.clipboard_queued);transferStatus.setText(R.string.transfer_queued)
     }
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -156,7 +184,7 @@ class MainActivity : Activity() {
                     }
                     check(!Thread.currentThread().isInterrupted); output.toByteArray()
                 } ?: error("Cannot open selected file")
-                if (!isDestroyed) runOnUiThread { queued.set(OutgoingAsset(1, name, bytes)); payload.text = name; status.setText(R.string.file_ready) }
+                if (!isDestroyed) runOnUiThread { queued.set(OutgoingAsset(1, name, bytes)); payload.text = name; status.setText(R.string.file_ready);transferStatus.setText(R.string.transfer_queued) }
             } catch (e: Exception) { if (!isDestroyed) runOnUiThread { status.text = getString(R.string.file_error, e.message) } }
         }
     }
@@ -213,7 +241,7 @@ class MainActivity : Activity() {
         getPreferences(MODE_PRIVATE).edit().putString("desktop", host).apply()
         lateinit var session: RadarPipeline
         val report: (String) -> Unit = { message -> runOnUiThread { if (pipeline === session && !stopping) {
-            status.text = message
+            if(message.startsWith("Sending ") || message.startsWith("Transfer failed:") || message.startsWith("Received by desktop"))transferStatus.text=message else status.text=message
             if (message.startsWith("Stopped:")) Toast.makeText(this, message, Toast.LENGTH_LONG).show()
         } } }
         val transfer = token?.let { secret -> TransferClient(host, secret, { queued.get() }, { sent ->
@@ -227,7 +255,7 @@ class MainActivity : Activity() {
             }
         } })
         pipeline = session; stopping = false; start.isEnabled = false; address.isEnabled = false; code.isEnabled = false
-        stop.isEnabled = true; calibrate.isEnabled = true; badge.setText(R.string.listening); radar.linked = true
+        stop.isEnabled = true; calibrate.isEnabled = true; badge.setText(if(token==null)R.string.visuals_only else R.string.listening); radar.linked = true
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); status.setText(R.string.starting); session.start()
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -242,6 +270,8 @@ class MainActivity : Activity() {
     }
     private fun stopCapture() {
         permissionPending = false
+        manualTransfer?.close();manualTransfer=null
+        if(::sendNow.isInitialized)sendNow.isEnabled=true
         if (connecting) {
             ++connectGeneration; connectTask?.cancel(true); connectTask = null; connecting = false
             idleControls(); status.setText(R.string.connection_cancelled)
@@ -251,5 +281,6 @@ class MainActivity : Activity() {
     }
     override fun onStart() { super.onStart(); foreground = true; if (::radar.isInitialized) radar.animate = true }
     override fun onStop() { foreground = false; if (::radar.isInitialized) radar.animate = false; stopCapture(); window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); super.onStop() }
+    override fun onRetainNonConfigurationInstance(): Any = Draft(address.text.toString(),code.text.toString(),queued.get())
     override fun onDestroy() { storage.shutdownNow(); queued.set(null); super.onDestroy() }
 }

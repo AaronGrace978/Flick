@@ -10,10 +10,12 @@ import java.security.SecureRandom
 
 /** Real desktop reachability/key check, before microphone acquisition begins. */
 object PairingClient {
-    fun check(host: String, code: ByteArray, port: Int = 8089, timeoutMs: Long = 3500) {
+    fun check(host: String, code: ByteArray, port: Int = 8089, timeoutMs: Long = 3500) { exchange(host,code,port,timeoutMs,false) }
+    fun requestTransfer(host:String,code:ByteArray,port:Int=8089,timeoutMs:Long=3500):Long = exchange(host,code,port,timeoutMs,true)
+    private fun exchange(host:String,code:ByteArray,port:Int,timeoutMs:Long,manual:Boolean):Long {
         require(timeoutMs in 100..10000)
         val nonce = SecureRandom().nextLong()
-        val request = Handoff.pairRequest(code, nonce)
+        val request = if(manual) Handoff.sendRequest(code,nonce) else Handoff.pairRequest(code,nonce)
         var waitingForUi = false
         DatagramChannel.open().use { channel ->
             channel.configureBlocking(false)
@@ -36,10 +38,13 @@ object PairingClient {
                             response.clear()
                             if (channel.read(response) > 0) {
                                 response.flip()
+                                if(manual) Handoff.sendReply(response.duplicate(),nonce)?.let { return it }
                                 when (Handoff.pairReply(response, nonce)) {
-                                    Handoff.PairReply.CONNECTED -> return
+                                    Handoff.PairReply.CONNECTED -> if(!manual) return 0
                                     Handoff.PairReply.REJECTED -> error("Wrong pairing code. Use pairing.key from this desktop.")
                                     Handoff.PairReply.WAITING -> waitingForUi = true
+                                    Handoff.PairReply.BUSY -> error("Desktop is completing another transfer. Wait a few seconds and retry.")
+                                    Handoff.PairReply.FAILED -> error("Desktop could not open TCP 8090. Close other Flick instances and retry.")
                                     null -> Unit
                                 }
                             }

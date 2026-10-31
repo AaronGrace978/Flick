@@ -15,6 +15,7 @@ pub struct Gesture {
     /// Screen-edge direction in radians. +X acceleration maps to the left edge.
     pub angle: f32,
     pub phase: Phase,
+    pub armed: bool,
 }
 
 pub struct GestureEngine {
@@ -122,6 +123,7 @@ impl GestureEngine {
             velocity: packet.velocity,
             angle: self.angle,
             phase: self.phase,
+            armed: self.armed,
         }
     }
 }

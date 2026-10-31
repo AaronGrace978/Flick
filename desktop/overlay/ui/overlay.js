@@ -146,6 +146,7 @@ function receiveAsset(data) {
     from: { x: edge.x - 176, y: edge.y - cardHeight / 2 },
     to: end,
     completed: false,
+    manual: data.manual === true,
   };
   capture(data.angle);
 }
@@ -157,10 +158,14 @@ function status(data) {
   if (animation && data.id === animation.id) {
     card.classList.add(data.ok ? "delivered" : "failed");
     document.querySelector("#channel-state").textContent = data.ok
-      ? "DELIVERED"
+      ? animation.manual
+        ? "RECEIVED"
+        : "DELIVERED"
       : "MANUAL PASTE";
     document.querySelector("#asset-state").textContent = data.ok
-      ? "Paste sent to your workspace"
+      ? animation.manual
+        ? "Saved in desktop inbox"
+        : "Paste sent to your workspace"
       : "Received · see desktop status";
   }
 }

@@ -43,6 +43,28 @@ one monitor. Unsupported native styling fails initialization rather than leaving
 an input-blocking fullscreen window behind. WebView rendering and compositor
 behavior must still be validated on each OS/compositor used for distribution.
 
+## First verify the inbox transfer
+
+After entering the desktop address/key, choose a JPG on Android and tap
+**Send to inbox now**. This path does not require Connect, microphone permission,
+the beacon, calibration, or any physical gesture. A matching desktop must be
+running. The phone displays requesting/sending/received or a specific network
+failure, separately from the sensor readings. A confirmed receipt means the item
+was saved in the desktop inbox. This manual path animates/previews the received
+image but does **not** automatically paste into another application.
+
+If manual send succeeds, file transport is working and the remaining issue is
+acoustic gesture detection. The desktop shows radial velocity and
+hold-still/armed/approaching/captured states. Calibration alone does not send a
+file. Auto transfer requires a queued payload, pairing code, a valid approach
+above 0.5 m/s **toward the speaker**, followed by a stop/reversal. Merely showing
+accelerometer/gyro numbers does not establish a completed flick.
+
+Ordinary Android rotation now keeps the active recording and draft intact. Other
+configuration-driven screen recreations retain the queued bytes and code only in
+RAM; capture must be restarted. Process termination still clears that draft, and
+a blank-key capture session is explicitly labeled visuals-only.
+
 ## Pair and hand off
 
 On first launch, the desktop creates an OS-random 256-bit pairing key in its app
@@ -191,8 +213,8 @@ acceptance tests; the platform matrix in CI checks compilation, not physical use
 
 ### Current-instance results
 
-Linux Tauri compilation/linking and workspace Clippy passed. All nine Rust tests,
-twelve Kotlin check groups, the real UDP smoke test, and the Chromium shader/animation
+Linux Tauri compilation/linking and workspace Clippy passed. All ten Rust tests,
+fourteen Kotlin check groups, the real UDP smoke test, and the Chromium shader/animation
 regression passed. The Android debug APK built and Android lint reports no issues.
 The Win32 clipboard/input module also type-checks against Rust's Windows target.
 A native X11 end-to-end attempt was blocked by this non-root environment's relocated
@@ -210,3 +232,14 @@ desktop pairing key is retained. If Android rejects installation because the old
 debug APK has a different signing key, uninstall the old Flick APK first, then
 install the new one and re-enter the address/key. Received desktop files remain in
 the inbox. This is a debug-signed prerelease, not a production-signed update channel.
+
+### Explicit manual-send control
+
+A manual request is `FLKSEND1` (8 ASCII bytes), a big-endian u64 nonce, and the
+32-byte pairing key. Desktop authenticates the request, checks readiness/busy
+state, and arms the same bounded TCP receiver without requiring telemetry. Success
+returns `FLKSEND2`, the echoed nonce, and a u64 capture ID (24 bytes total). Busy,
+rejected, waiting and listener-failure replies use the pairing reply layout.
+The original authenticated TCP file frame and receipt acknowledgement are reused.
+Manual transfers skip OS foreground/paste operations and retain normal inbox and
+preview behavior. Both desktop and Android must be updated to alpha.3 for this path.

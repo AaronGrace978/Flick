@@ -23,11 +23,23 @@ object Handoff {
             .put("FLICK001".toByteArray(Charsets.US_ASCII)).put(code).putLong(id).put(asset.kind.toByte())
             .putShort(name.size.toShort()).putLong(asset.bytes.size.toLong()).put(name).apply { flip() }
     }
-    enum class PairReply { CONNECTED, REJECTED, WAITING }
+    enum class PairReply { CONNECTED, REJECTED, WAITING, BUSY, FAILED }
     fun pairRequest(code: ByteArray, nonce: Long): ByteBuffer {
         require(code.size == 32)
         return ByteBuffer.allocate(48).order(ByteOrder.BIG_ENDIAN)
             .put("FLKPAIR1".toByteArray(Charsets.US_ASCII)).putLong(nonce).put(code).apply { flip() }
+    }
+    fun sendRequest(code: ByteArray, nonce: Long): ByteBuffer {
+        val request=pairRequest(code,nonce)
+        request.position(0)
+        request.put("FLKSEND1".toByteArray(Charsets.US_ASCII));request.position(0)
+        return request
+    }
+    fun sendReply(buffer: ByteBuffer, nonce: Long): Long? {
+        if(buffer.remaining()!=24)return null
+        val name=ByteArray(8);buffer.get(name)
+        if(String(name,Charsets.US_ASCII)!="FLKSEND2" || buffer.order(ByteOrder.BIG_ENDIAN).long!=nonce)return null
+        return buffer.long.takeIf {it>0}
     }
     fun pairReply(buffer: ByteBuffer, nonce: Long): PairReply? {
         if (buffer.remaining() != 16) return null
@@ -37,6 +49,8 @@ object Handoff {
             "FLKPOK01" -> PairReply.CONNECTED
             "FLKPBAD1" -> PairReply.REJECTED
             "FLKPWAIT" -> PairReply.WAITING
+            "FLKPBUSY" -> PairReply.BUSY
+            "FLKPFAIL" -> PairReply.FAILED
             else -> null
         }
     }

@@ -12,6 +12,20 @@ use std::{
 pub const MAGIC: &[u8; 8] = b"FLICK001";
 pub const MAX_BYTES: u64 = 16 * 1024 * 1024;
 pub const MAX_TEXT: u64 = 256 * 1024;
+/// Authenticate an explicit manual-send request without depending on acoustic data.
+pub fn manual_request(request: &[u8], token: &[u8; 32]) -> Option<(u64, bool)> {
+    if request.len() != 48 || &request[..8] != b"FLKSEND1" {
+        return None;
+    }
+    let mismatch = request[16..]
+        .iter()
+        .zip(token)
+        .fold(0u8, |diff, (a, b)| diff | (a ^ b));
+    Some((
+        u64::from_be_bytes(request[8..16].try_into().ok()?),
+        mismatch == 0,
+    ))
+}
 /// Respond to a pairing probe independently of audio, gestures, or file transfer.
 /// Both request and reply bind a fresh client nonce. Transport remains trusted-LAN.
 pub fn pairing_reply(request: &[u8], token: &[u8; 32], ready: bool) -> Option<[u8; 16]> {
@@ -243,6 +257,17 @@ mod tests {
         b.extend(name.as_bytes());
         b.extend(bytes);
         b
+    }
+    #[test]
+    fn manual_send_control_requires_matching_key_and_echoes_nonce() {
+        let mut request = Vec::from(*b"FLKSEND1");
+        request.extend(123u64.to_be_bytes());
+        request.extend([7; 32]);
+        assert_eq!(manual_request(&request, &[7; 32]), Some((123, true)));
+        assert_eq!(manual_request(&request, &[8; 32]), Some((123, false)));
+        assert!(manual_request(&request[..47], &[7; 32]).is_none());
+        request[0] = 0;
+        assert!(manual_request(&request, &[7; 32]).is_none());
     }
     #[test]
     fn pairing_probes_bind_nonce_and_report_key_or_readiness_errors() {

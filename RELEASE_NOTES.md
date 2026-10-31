@@ -1,41 +1,40 @@
-# v0.2.0-alpha.2 — Desktop UI and pairing fixes
+# v0.2.0-alpha.3 — Direct inbox transfer and gesture diagnostics
 
-This update fixes the missing desktop interface and silent pairing flow in alpha.1.
-Install matching desktop and Android builds; the old desktop cannot answer the new
-pairing check. **Close both old terminal windows before launching this version.**
+This update makes image delivery testable independently of the acoustic detector.
+Use matching desktop and Android builds, and close the old desktop app first.
 
-## What changed
+## Changes
 
-- A visible Flick desktop window with LAN IPv4, selectable pairing code, pairing
-  age and live sensor-data indication. The transparent overlay remains separate.
-- Start/stop the beacon from the desktop window. Windows release builds no longer
-  open console windows; closing Flick stops its managed beacon.
-- Real address/key verification before microphone capture. Wrong code, timeout,
-  unready desktop and microphone failures produce visible feedback.
-- Android disabled buttons now look disabled, feedback appears by the controls,
-  and cancelled checks/permission prompts restore usable controls.
-- Actual received-image previews in the floating card and desktop window, with
-  an Open received folder button. Files are retained in the inbox.
-- Scoped image access and control-window-only access to pairing/beacon commands.
-- Nine Rust tests, twelve Kotlin check groups, browser UI/image checks, GUI build,
-  Android build and lint checks. Native desktop/device acceptance remains pending.
+- **Send to inbox now** on Android sends the selected file/text without a beacon,
+  microphone permission, calibration or gesture. It uses the same paired, bounded
+  TCP receiver and stores the actual item in the desktop inbox.
+- Manual transfers animate/preview received images but do not paste into another
+  application. The automatic flick path retains its existing paste behavior.
+- Separate transfer status shows requesting/sending/received or a network error;
+  live accelerometer/gyro messages no longer overwrite transport feedback.
+- Desktop displays radial velocity and hold-still/armed/approach/capture feedback.
+  Calibration alone does not send a file. A flick still requires a queued payload,
+  a key and an approach above 0.5 m/s toward the speaker followed by a stop.
+- Ordinary Android rotation no longer recreates the recording activity. The image
+  and key are retained in RAM across other configuration-driven recreations.
+- Blank-key recording is explicitly labeled visuals-only. The last code check is
+  distinguished from a current authenticated transfer.
+- The shared Kotlin transport has a real UDP/TCP JPG test that verifies bytes in a
+  disk inbox without using audio or IMU APIs.
 
-## Downloads and upgrade
+## Verification and limits
 
-Desktop archives contain `flick-overlay`, `emitter`, `receiver`, guides and LICENSE.
-Keep these executables together. The Android APK is debug-signed for API 26+;
-if its signing key conflicts with your old APK, uninstall the old Flick APK first.
-The existing desktop pairing.key is retained. SHA256SUMS covers binary downloads;
-corresponding source is available from this tag's GitHub source archives.
+Ten Rust tests, fourteen Kotlin regression groups, desktop compilation/lint,
+Android APK/lint and browser UI tests are required by the release workflow.
+Acoustic accuracy and native paste behavior still require physical-device testing.
+A successful direct inbox send verifies file transport, not gesture accuracy.
 
-## Limits
+Desktop archives contain flick-overlay, emitter, receiver, guides and GPL-3.0
+LICENSE. The Android APK is debug-signed, API 26+. If signatures conflict with an
+older debug APK, uninstall that APK first. The desktop pairing key and received
+files are retained. SHA256SUMS covers the binary assets; source is available for
+this tag. Desktop executables remain unsigned/unnotarized.
 
-This is still an experimental alpha. A valid network pairing does not establish
-microphone ultrasonic support or tracking accuracy. The tone measures radial
-velocity and relative displacement, not absolute range. Native OS click-through,
-focus/paste permissions and physical device behavior require acceptance testing.
-
-Transport is paired but unencrypted: use a trusted LAN and allow UDP 8089/TCP 8090
-on the private network. Desktop executables are unsigned/unnotarized. Linux needs
-GTK3/WebKitGTK 4.1, Windows needs WebView2, and native paste support varies by OS
-and target application. See OVERLAY.md for full instructions and platform limits.
+Use only a trusted LAN: pairing/control and TCP payloads are not encrypted. Allow
+UDP 8089 and TCP 8090 on the desktop's private-network firewall. See OVERLAY.md
+for protocol details, platform support, inbox recovery and gesture limitations.

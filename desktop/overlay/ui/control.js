@@ -25,7 +25,7 @@ async function refresh() {
     document.querySelector("#phone").textContent =
       state.paired_age === null
         ? "No phone paired yet"
-        : `Phone paired ${Math.floor(state.paired_age / 1000)}s ago`;
+        : `Last code check ${Math.floor(state.paired_age / 1000)}s ago`;
     document.querySelector("#audio").textContent =
       state.telemetry_age !== null && state.telemetry_age < 1000
         ? "Sensor data live"
@@ -74,6 +74,20 @@ async function start() {
     beacon.disabled = true;
     return;
   }
+  await window.__TAURI__.event.listen("flick://telemetry", (event) => {
+    const data = event.payload;
+    if (Number.isFinite(data.velocity))
+      document.querySelector("#velocity").textContent =
+        `Radial velocity: ${data.velocity.toFixed(3)} m/s`;
+    document.querySelector("#gesture").textContent =
+      data.phase === "capture"
+        ? "Flick captured · requesting file"
+        : data.phase === "approach"
+          ? "Approach detected · stop to hand off"
+          : data.armed
+            ? "Armed · approach the speaker above 0.5 m/s, then stop"
+            : "Hold still to arm the flick detector";
+  });
   await window.__TAURI__.event.listen("flick://status", (event) =>
     feedback(event.payload.message, !event.payload.ok),
   );

@@ -27,6 +27,7 @@ struct TelemetryPayload {
     velocity: f32,
     angle: f32,
     phase: &'static str,
+    armed: bool,
 }
 #[derive(Clone, Serialize)]
 struct AssetPayload {
@@ -34,6 +35,7 @@ struct AssetPayload {
     label: String,
     angle: f32,
     preview: Option<String>,
+    manual: bool,
 }
 #[derive(Clone, Serialize)]
 struct StatusPayload {
@@ -46,6 +48,7 @@ struct Pending {
     asset: Asset,
     target: Result<u64, String>,
     ready: Instant,
+    manual: bool,
 }
 struct Runtime {
     running: AtomicBool,
@@ -81,10 +84,9 @@ async fn complete_handoff(
     };
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let result = pending
-            .target
-            .and_then(|target| native::paste(&pending.asset, target));
+        let result = if pending.manual {Ok(())} else {pending.target.and_then(|target|native::paste(&pending.asset,target))};
         let message = match &result {
+            Ok(_) if pending.manual => "Image/file received and saved in inbox; manual transfer does not paste into another app".into(),
             Ok(_) => "Clipboard populated; paste sent to the active target".into(),
             Err(e) => format!("{e}. Received items remain in the inbox."),
         };
@@ -287,6 +289,8 @@ struct Capture {
     listener: TcpListener,
     expires: Instant,
     worker: bool,
+    manual: bool,
+    nonce: u64,
 }
 fn serve(
     app: tauri::AppHandle,
@@ -313,6 +317,7 @@ fn serve(
                 continue;
             }
             let angle = capture.as_ref().map_or(std::f32::consts::PI, |c| c.angle);
+            let manual = capture.as_ref().is_some_and(|c| c.manual);
             capture = None;
             match result {
                 Ok((asset, target)) => {
@@ -336,6 +341,7 @@ fn serve(
                             asset,
                             target,
                             ready: Instant::now(),
+                            manual,
                         });
                     }
                     if let Err(e) = app.emit(
@@ -345,6 +351,7 @@ fn serve(
                             label,
                             angle,
                             preview,
+                            manual,
                         },
                     ) {
                         eprintln!("Asset UI delivery: {e}");
@@ -383,6 +390,69 @@ fn serve(
         for _ in 0..128 {
             match udp.recv_from(&mut bytes) {
                 Ok((n, peer)) => {
+                    if let Some((nonce, authenticated)) =
+                        handoff::manual_request(&bytes[..n], &token)
+                    {
+                        let mut status = *b"FLKPBUSY";
+                        if !authenticated {
+                            status = *b"FLKPBAD1";
+                        } else if !state.ready.load(Ordering::Relaxed) {
+                            status = *b"FLKPWAIT";
+                        } else {
+                            state.paired_at.store(
+                                state.started.elapsed().as_millis() as u64 + 1,
+                                Ordering::Relaxed,
+                            );
+                            if capture.is_none() && !state.busy.swap(true, Ordering::Relaxed) {
+                                match TcpListener::bind("0.0.0.0:8090").and_then(|listener| {
+                                    listener.set_nonblocking(true)?;
+                                    Ok(listener)
+                                }) {
+                                    Ok(listener) => {
+                                        capture = Some(Capture {
+                                            id: next_id,
+                                            peer,
+                                            angle: std::f32::consts::PI,
+                                            listener,
+                                            expires: Instant::now() + Duration::from_secs(5),
+                                            worker: false,
+                                            manual: true,
+                                            nonce,
+                                        });
+                                        next_id += 1;
+                                        let _=app.emit("flick://status",StatusPayload{id:next_id-1,ok:true,message:"Manual send accepted; waiting for the file on TCP 8090".into()});
+                                    }
+                                    Err(error) => {
+                                        state.busy.store(false, Ordering::Relaxed);
+                                        status = *b"FLKPFAIL";
+                                        let _ = app.emit(
+                                            "flick://status",
+                                            StatusPayload {
+                                                id: 0,
+                                                ok: false,
+                                                message: format!("Cannot open TCP 8090: {error}"),
+                                            },
+                                        );
+                                    }
+                                }
+                            }
+                            if let Some(c) = &capture {
+                                if c.manual && c.peer == peer && c.nonce == nonce && !c.worker {
+                                    let mut reply = [0u8; 24];
+                                    reply[..8].copy_from_slice(b"FLKSEND2");
+                                    reply[8..16].copy_from_slice(&nonce.to_be_bytes());
+                                    reply[16..].copy_from_slice(&c.id.to_be_bytes());
+                                    let _ = udp.send_to(&reply, peer);
+                                    continue;
+                                }
+                            }
+                        }
+                        let mut reply = [0u8; 16];
+                        reply[..8].copy_from_slice(&status);
+                        reply[8..].copy_from_slice(&nonce.to_be_bytes());
+                        let _ = udp.send_to(&reply, peer);
+                        continue;
+                    }
                     if let Some(reply) = handoff::pairing_reply(
                         &bytes[..n],
                         &token,
@@ -429,8 +499,11 @@ fn serve(
                                     listener,
                                     expires: Instant::now() + Duration::from_secs(5),
                                     worker: false,
+                                    manual: false,
+                                    nonce: 0,
                                 });
                                 next_id += 1;
+                                let _=app.emit("flick://status",StatusPayload{id:next_id-1,ok:true,message:"Flick captured; waiting for the queued file on TCP 8090".into()});
                             }
                             Err(e) => {
                                 state.busy.store(false, Ordering::Relaxed);
@@ -458,6 +531,7 @@ fn serve(
                             velocity: gesture.velocity,
                             angle: gesture.angle,
                             phase,
+                            armed: gesture.armed,
                         },
                     );
                 }
@@ -480,6 +554,7 @@ fn serve(
                     velocity: 0.0,
                     angle: std::f32::consts::PI,
                     phase: "idle",
+                    armed: false,
                 },
             );
         }
@@ -504,8 +579,13 @@ fn serve(
                         let directory = directory.join("inbox");
                         let tx = tx.clone();
                         let state = state.clone();
+                        let manual = c.manual;
                         std::thread::spawn(move || {
-                            let target = native::foreground();
+                            let target = if manual {
+                                Err("Manual transfer".into())
+                            } else {
+                                native::foreground()
+                            };
                             let result =
                                 handoff::receive(stream, &token, id, &directory, &state.running)
                                     .map(|asset| (asset, target))

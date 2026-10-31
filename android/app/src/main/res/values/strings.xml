@@ -36,4 +36,11 @@
     <string name="connection_failed">Desktop connection failed. Check its address and firewall.</string>
     <string name="connection_cancelled">Connection check cancelled.</string>
     <string name="permission_granted">Microphone permission granted. Tap Connect to start listening.</string>
+    <string name="send_now">Send to inbox now ↗</string>
+    <string name="select_payload">Choose a file or clipboard text before sending.</string>
+    <string name="preparing_send">Requesting a direct desktop transfer…</string>
+    <string name="transfer_idle">No transfer requested yet.</string>
+    <string name="transfer_queued">Queued. Tap Send to inbox now or perform a flick.</string>
+    <string name="visuals_only">● VISUALS ONLY / NO FILE TRANSFER KEY</string>
+    <string name="draft_restored">Queued content and code restored. Tap Connect to resume, or Send to inbox now.</string>
 </resources>

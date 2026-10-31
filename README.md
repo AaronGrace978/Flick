@@ -20,7 +20,7 @@ audio-processing, UI, networking or sensor-fusion framework is bundled.
 For the visual app, extract the matching desktop archive and open `flick-overlay`
 (`flick-overlay.exe` on Windows). Its window displays the desktop IPv4 and pairing
 code. Start the beacon there, connect the matching Android app, choose an image,
-and calibrate. Received photos show in the floating animation and the desktop's
+and calibrate for gesture transfer, or tap Send to inbox now to test file delivery directly. Received photos show in the floating animation and the desktop's
 last-received panel. See [OVERLAY.md](OVERLAY.md) for setup and upgrade instructions.
 
 The following commands are for the terminal-only workflow.
@@ -161,7 +161,7 @@ The receiver/library can be built without CPAL/native audio dependencies using
 `cargo test --locked --no-default-features` or
 `cargo build --release --locked --no-default-features --bin receiver`.
 
-`core:check` executes twelve standard-library regression groups (not a zero-test
+`core:check` executes fourteen standard-library regression groups (not a zero-test
 JUnit run): both capture rates, Doppler sign/interpolation, noise, clipping,
 competing tones, calibration, wire bytes, sensor freshness and sender freshness.
 Rust tests cover packet validation, ordering, relative-delay rejection, reconnects,
@@ -174,11 +174,11 @@ remote CI results are not claimed until that workflow runs.
 
 Verified in this Linux cloud instance:
 
-- Both Rust release binaries compiled; nine Rust regression tests passed.
+- Both Rust release binaries compiled; ten Rust regression tests passed.
 - Rust formatting and Clippy with warnings denied passed.
 - The real loopback UDP smoke test passed.
 - CPAL opened a 48 kHz ALSA null sink and exited cleanly on Enter.
-- Twelve Kotlin core regression groups passed on the JVM.
+- Fourteen Kotlin core regression groups passed on the JVM.
 - Android debug APK built; Android lint passed (see the generated report).
 - The checked-in Gradle wrapper downloaded and checksum-verified Gradle 8.9.
 

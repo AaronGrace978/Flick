@@ -134,5 +134,57 @@ fun main() {
             check(error?.message?.contains("visual layer is not ready")==true)
         }
     }
+    verify("Manual send framing rejects wrong nonce and requires a positive capture ID") {
+        val request=Handoff.sendRequest(ByteArray(32) {7},123)
+        check(request.remaining()==48)
+        check(String(request.array(),0,8,Charsets.US_ASCII)=="FLKSEND1")
+        fun reply(nonce:Long,id:Long)=ByteBuffer.allocate(24).put("FLKSEND2".toByteArray()).putLong(nonce).putLong(id).apply {flip()}
+        check(Handoff.sendReply(reply(123,42),123)==42L)
+        check(Handoff.sendReply(reply(124,42),123)==null)
+        check(Handoff.sendReply(reply(123,0),123)==null)
+    }
+    verify("Real manual JPG transfer reaches a disk inbox without audio or IMU") {
+        val loopback=java.net.InetAddress.getByName("127.0.0.1")
+        val udp=java.net.DatagramSocket(0,loopback);udp.soTimeout=2500
+        val tcp=java.net.ServerSocket(0,1,loopback);tcp.soTimeout=2500
+        val folder=java.nio.file.Files.createTempDirectory("flick-inbox-test")
+        val data=ByteArray(32000) {(it%251).toByte()}
+        val asset=OutgoingAsset(1,"photo.jpg",data)
+        val failure=java.util.concurrent.atomic.AtomicReference<Throwable?>()
+        val delivered=java.util.concurrent.atomic.AtomicBoolean(false)
+        val done=java.util.concurrent.CountDownLatch(1)
+        val worker=Thread {
+            try {
+                val packet=java.net.DatagramPacket(ByteArray(64),64);udp.receive(packet)
+                check(packet.length==48 && String(packet.data,0,8,Charsets.US_ASCII)=="FLKSEND1")
+                val reply=ByteBuffer.allocate(24).put("FLKSEND2".toByteArray()).put(packet.data,8,8).putLong(42).array()
+                udp.send(java.net.DatagramPacket(reply,reply.size,packet.socketAddress))
+                tcp.accept().use { socket ->
+                    socket.soTimeout=2500
+                    val input=java.io.DataInputStream(socket.getInputStream())
+                    val header=ByteArray(59);input.readFully(header)
+                    val h=ByteBuffer.wrap(header)
+                    check(String(header,0,8,Charsets.US_ASCII)=="FLICK001" && h.getLong(40)==42L)
+                    check(header.sliceArray(8 until 40).contentEquals(ByteArray(32) {7}))
+                    val name=ByteArray(h.getShort(49).toInt());input.readFully(name)
+                    check(String(name)=="photo.jpg" && h.getLong(51)==data.size.toLong())
+                    val content=ByteArray(data.size);input.readFully(content)
+                    java.nio.file.Files.write(folder.resolve("photo.jpg"),content)
+                    socket.getOutputStream().write(byteArrayOf(79,75))
+                }
+            } catch(error:Throwable) {failure.set(error)}
+        }
+        val client=TransferClient("127.0.0.1",ByteArray(32) {7},{asset},{delivered.set(true)},{},udp.localPort,tcp.localPort,{done.countDown()})
+        worker.start()
+        try {
+            client.sendNow();check(done.await(5,java.util.concurrent.TimeUnit.SECONDS))
+            failure.get()?.let {throw it}
+            check(delivered.get())
+            check(java.nio.file.Files.readAllBytes(folder.resolve("photo.jpg")).contentEquals(data))
+        } finally {
+            client.close();udp.close();tcp.close();worker.join(3000)
+            java.nio.file.Files.deleteIfExists(folder.resolve("photo.jpg"));java.nio.file.Files.deleteIfExists(folder)
+        }
+    }
     println("$passed core regression checks passed")
 }
