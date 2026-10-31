@@ -1,33 +1,29 @@
-# v0.2.0-alpha.3 — Direct inbox transfer and gesture diagnostics
+# v0.3.0-alpha.1 — Flicks without holding the phone on the speaker
 
-This update makes image delivery testable independently of the acoustic detector.
-Use matching desktop and Android builds, and close the old desktop app first.
+A flick no longer depends on a strong 20 kHz lock. Hold the phone still until the
+desktop says armed, then flick it toward the screen and stop. Use matching desktop
+and Android builds, and close the old desktop app first.
 
 ## Changes
 
-- **Send to inbox now** on Android sends the selected file/text without a beacon,
-  microphone permission, calibration or gesture. It uses the same paired, bounded
-  TCP receiver and stores the actual item in the desktop inbox.
-- Manual transfers animate/preview received images but do not paste into another
-  application. The automatic flick path retains its existing paste behavior.
-- Separate transfer status shows requesting/sending/received or a network error;
-  live accelerometer/gyro messages no longer overwrite transport feedback.
-- Desktop displays radial velocity and hold-still/armed/approach/capture feedback.
-  Calibration alone does not send a file. A flick still requires a queued payload,
-  a key and an approach above 0.5 m/s toward the speaker followed by a stop.
-- Ordinary Android rotation no longer recreates the recording activity. The image
-  and key are retained in RAM across other configuration-driven recreations.
-- Blank-key recording is explicitly labeled visuals-only. The last code check is
-  distinguished from a current authenticated transfer.
-- The shared Kotlin transport has a real UDP/TCP JPG test that verifies bytes in a
-  disk inbox without using audio or IMU APIs.
+- The phone keeps sending motion when it cannot hear the beacon. Those packets use
+  the same 24-byte layout with a NaN velocity. A sharp push followed by a stop
+  hands the queued file off. A tap, a bump, or walking around does not.
+- The acoustic flick still works when the speaker is audible. The search is wider
+  (about ±5 m/s), loud room noise no longer hides a weak tone, and a single noisy
+  velocity spike cannot fire a capture. A short dropout during an approach no
+  longer cancels the flick.
+- The desktop shows whether the tone is locked and whether it is waiting for a
+  push or an approach. Arming takes about a quarter second of stillness.
+- Direct inbox send is unchanged and still needs no gesture.
 
 ## Verification and limits
 
-Ten Rust tests, fourteen Kotlin regression groups, desktop compilation/lint,
+Sixteen Rust tests, fourteen Kotlin regression groups, desktop compilation/lint,
 Android APK/lint and browser UI tests are required by the release workflow.
-Acoustic accuracy and native paste behavior still require physical-device testing.
-A successful direct inbox send verifies file transport, not gesture accuracy.
+Which physical motion feels like a flick, and whether a given speaker reaches the
+phone, still need a real device. A successful direct inbox send verifies file
+transport only.
 
 Desktop archives contain flick-overlay, emitter, receiver, guides and GPL-3.0
 LICENSE. The Android APK is debug-signed, API 26+. If signatures conflict with an

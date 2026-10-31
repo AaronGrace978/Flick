@@ -9,14 +9,19 @@ data class Imu(val time: Long = 0, val x: Float = 0f, val y: Float = 0f, val z: 
         x.isFinite() && y.isFinite() && z.isFinite()
 }
 
-/** v1 packet: acquisition-window end timestamp, signed velocity and raw acceleration. */
-data class Estimate(val time: Long, val velocity: Float, val accel: Imu, val gyro: Imu)
+/** v1 packet: acquisition-window end timestamp, signed velocity and raw acceleration.
+ * A NaN velocity marks a motion-only sample sent while there is no reliable 20 kHz lock.
+ */
+data class Estimate(val time: Long, val velocity: Float, val accel: Imu, val gyro: Imu) {
+    val locked get() = !velocity.isNaN()
+}
 
 object Telemetry {
     const val BYTES = 24
     const val PERIOD_NS = 1_000_000_000L / 60
+    /** Desktops older than v0.3 reject NaN velocity, so motion-only packets are ignored there. */
     fun encode(buffer: ByteBuffer, sample: Estimate) {
-        require(buffer.capacity() >= BYTES && sample.time > 0 && sample.velocity.isFinite())
+        require(buffer.capacity() >= BYTES && sample.time > 0 && !sample.velocity.isInfinite())
         require(sample.accel.x.isFinite() && sample.accel.y.isFinite() && sample.accel.z.isFinite())
         buffer.clear().limit(BYTES)
         buffer.order(ByteOrder.BIG_ENDIAN).putLong(sample.time).putFloat(sample.velocity)

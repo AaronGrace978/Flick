@@ -72,7 +72,9 @@ proximity or full 3D position. Amplitude is not a reliable distance measurement.
 The raw accelerometer and gyroscope samples are time-associated with acoustic
 estimates; calibrated inertial positioning or world-coordinate fusion is not
 claimed. Acceleration includes gravity in Android device axes (m/s²); gyro uses
-rad/s. All three sensors are required.
+rad/s. All three sensors are required to start. A flick can also be recognized
+from the accelerometer alone when the phone cannot hear the beacon: hold still,
+push the phone toward the screen, then stop. That path needs no speaker contact.
 
 With a stationary source and moving microphone:
 
@@ -92,12 +94,14 @@ recording startup. Processing or hardware may still alter the signal.
 
 ## DSP and latency
 
-The pure Kotlin core uses N=4096 Hann-windowed samples and a 41-frequency Goertzel
+The pure Kotlin core uses N=4096 Hann-windowed samples and a 101-frequency Goertzel
 bank with half-bin spacing centered on 20 kHz. Log-power interpolation estimates
 signed shifts between bank frequencies. At 48 kHz, independent resolution is
-11.72 Hz and the search spans about ±117 Hz (±108 Hz at 44.1 kHz). Silence,
-clipping, weak peaks, competing strong peaks and search-edge peaks are rejected.
-Thresholds are POC defaults and need real-device characterization.
+11.72 Hz and the search spans about ±293 Hz, roughly ±5 m/s (±269 Hz at 44.1 kHz).
+Silence, clipping, competing strong peaks and search-edge peaks are rejected.
+Confidence is compared with the ultrasonic-band floor, so loud speech or fan noise
+does not by itself hide a weak beacon. Thresholds are POC defaults and need
+real-device characterization.
 
 Windows overlap at 60 Hz: 800 new samples at 48 kHz, 735 at 44.1 kHz. The window
 spans 85.3/92.9 ms, so overlap improves update cadence rather than true resolution.
@@ -109,8 +113,10 @@ identify the acquisition time; data over 100 ms old is suppressed, and persisten
 capture overruns or unsupported timestamps stop capture with an actionable error.
 IMU samples request 200 Hz and must be fresh within 100 ms. Sensors and UDP use
 separate workers. A latest-value slot, non-blocking sends and a deadline-skipping
-scheduler prevent replay after scheduling stalls. Invalid audio suppresses packets;
-60 Hz scheduling does not imply 60 valid measurements each second.
+scheduler prevent replay after scheduling stalls. With no reliable 20 kHz lock the
+phone still sends motion-only packets, marked with a NaN velocity, so a push flick
+can complete. Invalid or stale IMU data suppresses packets. 60 Hz scheduling does
+not imply 60 valid measurements each second.
 
 ## UDP protocol v1
 
@@ -120,7 +126,7 @@ without padding:
 | Offset | Type | Meaning |
 | --- | --- | --- |
 | 0 | unsigned 64-bit integer | Android boottime ns at the end of the audio window |
-| 8 | IEEE754 float32 | signed radial approach velocity, m/s |
+| 8 | IEEE754 float32 | signed radial approach velocity, m/s. NaN means motion only: no 20 kHz lock |
 | 12 | IEEE754 float32 | raw acceleration X, m/s² |
 | 16 | IEEE754 float32 | raw acceleration Y, m/s² |
 | 20 | IEEE754 float32 | raw acceleration Z, m/s² |
@@ -130,8 +136,9 @@ no gyro field. There is no range field. The alpha used estimate-availability
 rather than acquisition-end timestamps; numeric ordering remains wire compatible.
 
 The receiver binds `0.0.0.0:8089`; an optional argument overrides the bind address.
-It validates lengths, finite/range-bounded values, sender ownership and timestamp
-ordering. A sender owns the stream until two seconds of inactivity. Duplicates,
+It validates lengths, range-bounded acceleration, sender ownership and timestamp
+ordering. A NaN velocity is accepted as a motion-only sample. Infinite values are
+rejected. Desktops older than v0.3.0-alpha.1 drop those motion-only packets. A sender owns the stream until two seconds of inactivity. Duplicates,
 reordered packets and excess relative transit delay above 100 ms are dropped.
 Arrival-minus-sender time is tracked against its minimum observed offset; clocks
 do not need a common epoch. This cannot reveal the initial path delay or reject
@@ -172,15 +179,14 @@ remote CI results are not claimed until that workflow runs.
 
 ## Verified here and remaining acceptance
 
-Verified in this Linux cloud instance:
+Verified in this Linux cloud instance for v0.3.0-alpha.1:
 
-- Both Rust release binaries compiled; ten Rust regression tests passed.
-- Rust formatting and Clippy with warnings denied passed.
-- The real loopback UDP smoke test passed.
-- CPAL opened a 48 kHz ALSA null sink and exited cleanly on Enter.
-- Fourteen Kotlin core regression groups passed on the JVM.
-- Android debug APK built; Android lint passed (see the generated report).
-- The checked-in Gradle wrapper downloaded and checksum-verified Gradle 8.9.
+- Both Rust release binaries compiled; sixteen Rust regression tests passed.
+- Rust formatting and Clippy with warnings denied passed, including the overlay crate.
+- The real loopback UDP smoke test passed, including motion-only packets.
+- Fourteen Kotlin core regression groups passed on the JVM, including a weak beacon under loud low-frequency noise.
+- The overlay browser regression passed, including the no-lock push state.
+- The Android debug APK is built by the release workflow. This environment has no Android SDK, so the app module was not assembled here.
 
 There is no physical audio device or attached Android device in this environment.
 Acoustic response, Android lifecycle behavior on actual devices, sustained 60 Hz

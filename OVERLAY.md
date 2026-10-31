@@ -53,12 +53,17 @@ failure, separately from the sensor readings. A confirmed receipt means the item
 was saved in the desktop inbox. This manual path animates/previews the received
 image but does **not** automatically paste into another application.
 
-If manual send succeeds, file transport is working and the remaining issue is
-acoustic gesture detection. The desktop shows radial velocity and
-hold-still/armed/approaching/captured states. Calibration alone does not send a
-file. Auto transfer requires a queued payload, pairing code, a valid approach
-above 0.5 m/s **toward the speaker**, followed by a stop/reversal. Merely showing
-accelerometer/gyro numbers does not establish a completed flick.
+If manual send succeeds, file transport is working and a remaining miss is gesture
+detection. The desktop shows radial velocity, whether the 20 kHz tone is locked,
+and hold-still/armed/approaching/captured states. Calibration alone does not send a
+file. Auto transfer requires a queued payload and pairing code, then one of:
+
+- an acoustic approach above about 0.35 m/s toward the speaker that reaches 0.5 m/s, followed by a stop or reversal, or
+- with or without that tone, a sharp push of the phone followed by a stop.
+
+Hold the phone still for about a quarter second so the detector can arm. You do
+not have to hold it against the speaker. Merely showing accelerometer/gyro numbers
+does not establish a completed flick.
 
 Ordinary Android rotation now keeps the active recording and draft intact. Other
 configuration-driven screen recreations retain the queued bytes and code only in
@@ -84,7 +89,9 @@ and masks the input. Leaving the field empty enables visuals without file transf
    an unready visual layer explicitly. After pairing, allow microphone access and
    calibrate while stationary with the beacon on. Both the app and transfer worker stop when leaving the foreground.
 4. Focus the desired target application on the desktop. Hold the phone in a fixed,
-   upright orientation and approach, then stop/reverse the flick. Positive X motion
+   upright orientation until the desktop says armed, then flick it toward the
+   screen and stop. A 20 kHz lock makes the approach smoother. Without a lock,
+   push the phone sharply in the direction you want and stop. Positive X motion
    chooses the left edge; negative chooses the right, using gravity-subtracted
    device axes. This mapping is a heuristic, not a world-coordinate measurement.
 5. Capture triggers a splash and a gesture-bound TCP request to that Android UDP
@@ -119,14 +126,27 @@ formats. Unsupported/changed targets report a failure without activating a windo
 
 ## Gesture model and effect
 
-The detector must first see 300 ms of low radial velocity and a settled acceleration
-baseline. A rising approach above 0.5 m/s arms integration. Trapezoidal integration
-updates `distance -= velocity * dt`, starting at a **normalized 0.65 m reference**.
-It is relative displacement, never an absolute range measurement. Audio-clock bias
-and movement during calibration affect this estimate. Gaps above 100 ms reset the
-model rather than bridging stale samples. Reversal/dead stop, or a strong
-acceleration-associated velocity drop, captures once and starts a 1.2 s cooldown.
+The detector arms after about 250 ms of stillness: low radial velocity when a tone
+is locked, or little acceleration otherwise, and a settled gravity baseline.
+Walking or other sustained motion disarms it. Two triggers then share that state.
+
+The acoustic trigger needs two consecutive rising locked samples and an approach
+above about 0.35 m/s. Trapezoidal integration updates `distance -= velocity * dt`,
+starting at a **normalized 0.65 m reference**. It is relative displacement, never
+an absolute range measurement. Audio-clock bias and movement during calibration
+affect this estimate. A stop counts only after the approach has reached 0.5 m/s,
+so a single noisy blip does not capture. A strong acceleration-associated velocity
+drop also captures. A brief loss of tone during an approach does not cancel it.
 An approach lasting over 1.5 s cancels.
+
+The motion trigger does not need the beacon. A push above about 9 m/s² that
+continues for at least one more sample, followed by an opposing brake above about
+6 m/s², captures. A one-sample tap or bump does not. Gravity tracks slow rotation
+so changing how you hold the phone does not look like a push.
+
+Timestamp gaps above 250 ms, or about 300 ms without a packet, reset the model
+rather than bridging stale samples. Either trigger captures once and starts a
+1.2 s cooldown.
 
 Below the normalized 0.5 threshold, a cubic-Bezier Gaussian edge ridge increases
 amplitude toward the center. Its cyan premultiplied-alpha mesh is capped at 0.4 and
@@ -213,7 +233,7 @@ acceptance tests; the platform matrix in CI checks compilation, not physical use
 
 ### Current-instance results
 
-Linux Tauri compilation/linking and workspace Clippy passed. All ten Rust tests,
+Linux Tauri compilation/linking and workspace Clippy passed. All sixteen Rust tests,
 fourteen Kotlin check groups, the real UDP smoke test, and the Chromium shader/animation
 regression passed. The Android debug APK built and Android lint reports no issues.
 The Win32 clipboard/input module also type-checks against Rust's Windows target.
@@ -243,3 +263,12 @@ rejected, waiting and listener-failure replies use the pairing reply layout.
 The original authenticated TCP file frame and receipt acknowledgement are reused.
 Manual transfers skip OS foreground/paste operations and retain normal inbox and
 preview behavior. Both desktop and Android must be updated to alpha.3 for this path.
+
+### Flicking from across the room (v0.3.0-alpha.1)
+
+Install matching desktop and Android builds. Older desktops ignore the motion-only
+packets (NaN velocity) this version sends when the 20 kHz tone is too weak, so a
+phone-only update will not add push flicks. The acoustic flick still works against
+an older phone, with a wider frequency search and a stricter approach check on the
+new desktop. Close the previous desktop app before opening the new one. The
+existing pairing key and inbox files stay where they are.

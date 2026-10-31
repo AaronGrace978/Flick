@@ -21,7 +21,8 @@ fun main() {
         check(bank.shift(ShortArray(Goertzel.N)) == null)
         check(bank.shift(ShortArray(Goertzel.N) { if (it % 2 == 0) 32767 else -32768 }) == null)
         check(bank.shift(tone(48000, 1000.0)) == null)
-        check(bank.shift(tone(48000, 20117.1875)) == null)
+        val edge = Goertzel.CARRIER + (Goertzel.BINS / 2) * (48000.0 / Goertzel.N / 2)
+        check(bank.shift(tone(48000, edge)) == null) { "edge $edge should be rejected" }
     }
     verify("Broadband noise is rejected; beacon survives moderate noise") {
         val random = Random(978)
@@ -31,6 +32,16 @@ fun main() {
         for (i in signal.indices) signal[i] = (signal[i] + noise[i]).toShort()
         val shift = Goertzel(48000).shift(signal)
         check(shift != null && abs(shift - 42) < 0.5) { "Noisy shift=$shift" }
+        // Loud speech-band energy must not hide a weak ultrasonic beacon.
+        val masked = tone(48000, 20020.0, 0.01)
+        val hum = Random(7)
+        for (i in masked.indices) {
+            val low = (8000 * sin(2 * PI * 120.0 * i / 48000)).toInt()
+            val room = (hum.nextGaussian() * 4000).toInt()
+            masked[i] = (masked[i] + low + room).toInt().coerceIn(-32768, 32767).toShort()
+        }
+        val heard = Goertzel(48000).shift(masked)
+        check(heard != null && abs(heard - 20) < 1.0) { "Masked shift=$heard" }
     }
     verify("Competing strong ultrasonic tones are rejected") {
         val a = tone(48000, 19960.0, 0.15)
@@ -57,7 +68,10 @@ fun main() {
         check(b.remaining() == 24)
         val hex = b.array().joinToString("") { "%02x".format(it.toInt() and 255) }
         check(hex == "000000000000007b3f0000003f800000c0000000411cf5c3") { hex }
-        check(runCatching { Telemetry.encode(b, Estimate(1, Float.NaN, Imu(), Imu())) }.isFailure)
+        val motion = ByteBuffer.allocate(Telemetry.BYTES)
+        Telemetry.encode(motion, Estimate(1, Float.NaN, Imu(1, 1f, -2f, 9.81f), Imu()))
+        check(motion.getFloat(8).isNaN() && motion.getFloat(12) == 1f)
+        check(runCatching { Telemetry.encode(b, Estimate(1, Float.POSITIVE_INFINITY, Imu(), Imu())) }.isFailure)
     }
     verify("Sender drops stale data and skips missed deadlines") {
         val period = Telemetry.PERIOD_NS

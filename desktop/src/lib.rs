@@ -5,10 +5,11 @@ pub const SOUND_SPEED: f32 = 343.0;
 pub const PACKET_BYTES: usize = 24;
 
 /// v1 telemetry uses big-endian IEEE754 floats and Android boottime nanoseconds.
+/// A NaN velocity is a motion-only sample: the phone has no reliable 20 kHz lock.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Packet {
     pub timestamp: u64,
-    pub velocity: f32,
+    pub velocity: Option<f32>,
     pub accel: [f32; 3],
 }
 impl Packet {
@@ -21,16 +22,18 @@ impl Packet {
         for (i, value) in values.iter_mut().enumerate() {
             *value = f32::from_be_bytes(bytes[8 + i * 4..12 + i * 4].try_into().ok()?);
         }
+        let velocity = (!values[0].is_nan()).then_some(values[0]);
         if timestamp == 0
-            || values.iter().any(|v| !v.is_finite())
-            || values[0].abs() > 10.0
-            || values[1..].iter().any(|v| v.abs() > 200.0)
+            || velocity.is_some_and(|v| !v.is_finite() || v.abs() > 10.0)
+            || values[1..]
+                .iter()
+                .any(|v| !v.is_finite() || v.abs() > 200.0)
         {
             return None;
         }
         Some(Self {
             timestamp,
-            velocity: values[0],
+            velocity,
             accel: [values[1], values[2], values[3]],
         })
     }
@@ -131,7 +134,7 @@ mod tests {
         let b = bytes();
         let p = Packet::parse(&b).unwrap();
         assert_eq!(p.timestamp, 123);
-        assert_eq!(p.velocity, 0.5);
+        assert_eq!(p.velocity, Some(0.5));
         assert_eq!(p.accel, [1.0, -2.0, 9.81]);
         for n in 0..24 {
             assert!(Packet::parse(&b[..n]).is_none());
@@ -141,11 +144,21 @@ mod tests {
         assert!(Packet::parse(&big).is_none());
         for index in 0..4 {
             for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 201.0] {
+                if index == 0 && value.is_nan() {
+                    continue;
+                }
                 let mut bad = b.clone();
                 bad[8 + index * 4..12 + index * 4].copy_from_slice(&value.to_be_bytes());
                 assert!(Packet::parse(&bad).is_none());
             }
         }
+        let mut motion = b.clone();
+        motion[8..12].copy_from_slice(&f32::NAN.to_be_bytes());
+        let m = Packet::parse(&motion).unwrap();
+        assert_eq!((m.velocity, m.accel), (None, [1.0, -2.0, 9.81]));
+        let mut fast = b.clone();
+        fast[8..12].copy_from_slice(&10.5_f32.to_be_bytes());
+        assert!(Packet::parse(&fast).is_none());
         let mut zero = b;
         zero[..8].fill(0);
         assert!(Packet::parse(&zero).is_none());

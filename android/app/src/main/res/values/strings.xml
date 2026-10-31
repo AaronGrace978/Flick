@@ -26,7 +26,7 @@
     <string name="payload_too_large">Text must be valid, without NUL, and at most 256 KiB.</string>
     <string name="clipboard_queued">Clipboard text · queued for one handoff</string>
     <string name="preparing_file">Preparing selected file…</string>
-    <string name="file_ready">File queued. Connect, calibrate stationary, then flick.</string>
+    <string name="file_ready">File queued. Connect, hold still until armed, then flick toward the screen.</string>
     <string name="file_error">Cannot queue file: %1$s</string>
     <string name="invalid_pairing">Enter the desktop pairing code to transfer content (64 hexadecimal characters).</string>
     <string name="clear_payload">Clear queued content</string>

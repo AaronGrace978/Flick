@@ -2,7 +2,7 @@
 //! Transparent, non-activating overlay. UDP never performs blocking asset or UI work.
 mod native;
 use flick_radar::{
-    gesture::{GestureEngine, Phase},
+    gesture::{GestureEngine, Phase, Trigger},
     handoff::{self, Asset},
     Packet, Tracker,
 };
@@ -25,9 +25,11 @@ use tauri::{Emitter, Manager};
 struct TelemetryPayload {
     distance: f32,
     velocity: f32,
+    locked: bool,
     angle: f32,
     phase: &'static str,
     armed: bool,
+    motion: bool,
 }
 #[derive(Clone, Serialize)]
 struct AssetPayload {
@@ -475,7 +477,7 @@ fn serve(
                     {
                         continue;
                     }
-                    if last.elapsed() > Duration::from_millis(150) {
+                    if last.elapsed() > Duration::from_millis(300) {
                         engine.reset();
                     }
                     state.telemetry_at.store(
@@ -529,9 +531,11 @@ fn serve(
                         TelemetryPayload {
                             distance: gesture.distance,
                             velocity: gesture.velocity,
+                            locked: gesture.locked,
                             angle: gesture.angle,
                             phase,
                             armed: gesture.armed,
+                            motion: gesture.trigger == Some(Trigger::Motion),
                         },
                     );
                 }
@@ -544,7 +548,7 @@ fn serve(
                 }
             }
         }
-        if last.elapsed() > Duration::from_millis(150) && !stale {
+        if last.elapsed() > Duration::from_millis(300) && !stale {
             engine.reset();
             stale = true;
             let _ = app.emit(
@@ -552,9 +556,11 @@ fn serve(
                 TelemetryPayload {
                     distance: 0.65,
                     velocity: 0.0,
+                    locked: false,
                     angle: std::f32::consts::PI,
                     phase: "idle",
                     armed: false,
+                    motion: false,
                 },
             );
         }

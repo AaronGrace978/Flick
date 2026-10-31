@@ -79,6 +79,9 @@ const server = http.createServer((request, response) => {
     await page.evaluate(() => emitTest('flick://telemetry',{phase:'approach',velocity:.72,armed:false}));
     assert.ok((await page.locator('#gesture').textContent()).includes('Approach detected'));
     assert.ok((await page.locator('#velocity').textContent()).includes('0.720'));
+    await page.evaluate(() => emitTest('flick://telemetry',{phase:'approach',velocity:0,locked:false,armed:true,motion:true}));
+    assert.ok((await page.locator('#gesture').textContent()).includes('Push detected'));
+    assert.ok((await page.locator('#velocity').textContent()).includes('no 20 kHz lock'));
     await page.locator('#beacon').click();
     await page.waitForFunction(() => document.querySelector('#beacon').textContent === 'Stop beacon');
     assert.ok(await page.evaluate(() => calls.some(c => c.name === 'set_beacon' && c.payload.enabled === true)));

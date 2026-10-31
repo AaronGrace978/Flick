@@ -46,9 +46,20 @@ fn main() -> io::Result<()> {
         if last_print.elapsed() >= Duration::from_millis(100) {
             if let Some(p) = &latest {
                 if last_seen.elapsed() < Duration::from_millis(250) {
-                    let shift = p.velocity * CARRIER_HZ as f32 / SOUND_SPEED;
-                    let text = format!("Δf {shift:+7.2} Hz | |Δf| {:6.2} Hz | approach {:+6.3} m/s | accel [{:+7.3}, {:+7.3}, {:+7.3}] m/s²",
-                        shift.abs(), p.velocity, p.accel[0], p.accel[1], p.accel[2]);
+                    let acoustic = match p.velocity {
+                        Some(v) => {
+                            let shift = v * CARRIER_HZ as f32 / SOUND_SPEED;
+                            format!(
+                                "Δf {shift:+7.2} Hz | |Δf| {:6.2} Hz | approach {v:+6.3} m/s",
+                                shift.abs()
+                            )
+                        }
+                        None => "no 20 kHz lock (motion only)".into(),
+                    };
+                    let text = format!(
+                        "{acoustic} | accel [{:+7.3}, {:+7.3}, {:+7.3}] m/s²",
+                        p.accel[0], p.accel[1], p.accel[2]
+                    );
                     if terminal {
                         print!("\r{text}          ");
                     } else {

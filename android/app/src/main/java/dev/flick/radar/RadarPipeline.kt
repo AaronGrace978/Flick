@@ -174,12 +174,15 @@ class RadarPipeline(
                 if (calibrate.getAndSet(false)) { calibration.begin(); estimate = null; report("Calibrating: hold still with beacon on") }
                 val delta = bank.shift(block)
                 if (delta == null) {
-                    estimate = null
+                    val a = accel
+                    // Keep motion flowing so the desktop can still detect a flick without the tone.
+                    estimate = if (!calibration.collecting && a.fresh(now))
+                        Estimate(minOf(end, now), Float.NaN, a, gyro) else null
                     if (calibration.collecting) {
                         calibration.cancel()
                         report("Calibration cancelled: weak or clipped signal; retry with beacon on")
                     } else if (now - lastReport > 1_000_000_000L) {
-                        report("No reliable 20 kHz signal; check beacon, orientation and microphone")
+                        report("No 20 kHz lock: motion flick mode (push sharply toward the screen, then stop)")
                         lastReport = now
                     }
                     continue

@@ -76,16 +76,24 @@ async function start() {
   }
   await window.__TAURI__.event.listen("flick://telemetry", (event) => {
     const data = event.payload;
-    if (Number.isFinite(data.velocity))
-      document.querySelector("#velocity").textContent =
-        `Radial velocity: ${data.velocity.toFixed(3)} m/s`;
+    if (Number.isFinite(data.velocity)) {
+      const locked = data.locked !== false;
+      document.querySelector("#velocity").textContent = locked
+        ? `Radial velocity: ${data.velocity.toFixed(3)} m/s`
+        : "Radial velocity: no 20 kHz lock · motion flick available";
+    }
+    const motion = data.motion === true;
     document.querySelector("#gesture").textContent =
       data.phase === "capture"
         ? "Flick captured · requesting file"
         : data.phase === "approach"
-          ? "Approach detected · stop to hand off"
+          ? motion
+            ? "Push detected · stop to hand off"
+            : "Approach detected · stop to hand off"
           : data.armed
-            ? "Armed · approach the speaker above 0.5 m/s, then stop"
+            ? data.locked === false
+              ? "Armed without a tone lock · push toward the screen, then stop"
+              : "Armed · flick toward the screen and stop"
             : "Hold still to arm the flick detector";
   });
   await window.__TAURI__.event.listen("flick://status", (event) =>
