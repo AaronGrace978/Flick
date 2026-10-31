@@ -1,6 +1,6 @@
 # Flick acoustic Doppler
 
-<img width="1408" height="768" alt="image" src="https://github.com/user-attachments/assets/18a2e436-4d4c-44a2-9a9d-fde243ae8e79" />
+<img width="1408" height="768" alt="Flick desktop armed for a flick, with a photo arriving at the screen edge and the phone ready to push toward the screen." src="docs/flick.png" />
 
 **New: [Flick Visual Layer](OVERLAY.md)** — a visible desktop app plus a Tauri click-through cyan edge overlay,
 relative-displacement gestures, styled native Android controls, and paired text/file
