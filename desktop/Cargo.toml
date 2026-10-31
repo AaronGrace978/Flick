@@ -1,0 +1,15 @@
+[package]
+name = "flick-radar"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cpal = { version = "0.15.3", optional = true }
+
+[features]
+default = ["audio"]
+audio = ["dep:cpal"]
+
+[[bin]]
+name = "emitter"
+required-features = ["audio"]
